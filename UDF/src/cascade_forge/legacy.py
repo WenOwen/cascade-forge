@@ -12,7 +12,12 @@ import numpy as np
 from scipy.interpolate import PchipInterpolator
 
 from .features import extract_features
-from .models import AirfoilGeometry, file_sha256
+from .models import (
+    AirfoilGeometry,
+    SectionDefinition,
+    SectionSchedule,
+    file_sha256,
+)
 from .storage import DatasetStore
 from .validation import validate_profile
 
@@ -85,6 +90,49 @@ def ingest_legacy_anchors(
     manifest_path = destination / "source_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     return manifest
+
+
+def legacy_section_schedule(
+    raw_root: str | Path,
+    row_name: str,
+    *,
+    output_section_count: int | None = None,
+) -> SectionSchedule:
+    """从精选 NASA 元数据构造可追溯的三维 section schedule。"""
+
+    raw_root = Path(raw_root).resolve()
+    row_name = row_name.upper()
+    if row_name not in ROWS:
+        raise ValueError(f"未知叶排: {row_name}")
+    row_root = raw_root / row_name
+    metadata = json.loads((row_root / "section_metadata.json").read_text(encoding="utf-8"))
+    ref_hub = float(metadata["ref_hub_r"])
+    ref_tip = float(metadata["ref_tip_r"])
+    sections = []
+    for section in metadata["sections"]:
+        filename = metadata["filename_pattern"].format(suffix=section["suffix"])
+        source_hash = file_sha256(row_root / filename)
+        geometry_id = "geo_anchor_" + hashlib.sha256(
+            f"{row_name}:{section['suffix']}:{source_hash}".encode()
+        ).hexdigest()[:20]
+        span = (float(section["radius_in"]) - ref_hub) / (ref_tip - ref_hub)
+        sections.append(
+            SectionDefinition(
+                span_fraction=span,
+                radius_m=float(section["radius_in"]) * 0.0254,
+                chord_m=float(section["chord_in"]) * 0.0254,
+                geometry_id=geometry_id,
+                stagger_deg=float(section["gamma_deg"]),
+                axial_offset_m=-float(section["zcsl_in"]) * 0.0254,
+                tangential_offset_m=-float(section["ycsl_in"]) * 0.0254,
+            )
+        )
+    return SectionSchedule(
+        name=f"NASA120859-{row_name}",
+        blade_count=int(metadata["num_of_blades"]),
+        sections=sections,
+        output_section_count=output_section_count,
+    )
 
 
 def _anchor_geometry(

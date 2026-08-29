@@ -154,6 +154,7 @@ class SectionSchedule(BaseModel):
     blade_count: int = Field(gt=0)
     rotation_direction: Literal["cw", "ccw"] = "ccw"
     sections: list[SectionDefinition] = Field(min_length=2)
+    output_section_count: int | None = Field(default=None, ge=2, le=201)
     hub_curve_path: str | None = None
     shroud_curve_path: str | None = None
     units: Literal["m"] = "m"
@@ -175,6 +176,7 @@ class BladeSection(BaseModel):
     suction_xyz: list[list[float]]
     pressure_xyz: list[list[float]]
     geometry_id: str
+    interpolated: bool = False
 
 
 class BladeSurface(BaseModel):
