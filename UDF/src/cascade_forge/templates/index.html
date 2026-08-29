@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div><p class="eyebrow">GEOMETRY DATABASE</p><h1>从参数到可追溯叶片曲面</h1>
+  <p>确定性角度样条、C2 厚度、NASA 锚点和 GeomTurbo 输出。</p></div>
+  <div class="stats">
+    <article><strong>{{ total }}</strong><span>总叶型</span></article>
+    <article><strong>{{ generated }}</strong><span>生成叶型</span></article>
+    <article><strong>{{ anchors }}</strong><span>NASA 锚点</span></article>
+    <article><strong>{{ rejected }}</strong><span>拒绝提案</span></article>
+  </div>
+</section>
+<section class="grid">
+  <article class="panel">
+    <h2>参数化预览</h2>
+    <form hx-post="/ui/preview" hx-target="#preview" hx-indicator="#busy">
+      {% for name, value in default_spec.items() %}
+        {% if name not in ['handedness','points_per_side','generator_version','coordinate_convention'] %}
+        <label>{{ name }}<input type="number" step="any" name="{{ name }}" value="{{ value }}"></label>
+        {% endif %}
+      {% endfor %}
+      <button type="submit">生成并验证</button><span id="busy" class="htmx-indicator">计算中…</span>
+    </form>
+  </article>
+  <article class="panel" id="preview"><div class="placeholder">提交参数后显示叶型与审计结果</div></article>
+</section>
+<section class="panel">
+  <div class="section-title"><h2>数据库浏览</h2><button hx-get="/ui/geometries" hx-target="#geometry-table">刷新</button></div>
+  <div id="geometry-table" hx-get="/ui/geometries" hx-trigger="load"></div>
+</section>
+<section class="grid tools">
+  <article class="panel"><h2>双叶型比较</h2>
+    <form hx-get="/ui/compare" hx-target="#compare-result">
+      <label>左侧 Geometry_ID<input name="left" required></label>
+      <label>右侧 Geometry_ID<input name="right" required></label>
+      <button type="submit">叠加比较</button>
+    </form><div id="compare-result"></div>
+  </article>
+  <article class="panel"><h2>三维叶片预览</h2>
+    <form hx-post="/ui/blade-preview" hx-target="#blade-result">
+      <label class="wide">SectionSchedule JSON<textarea name="schedule_json" rows="8" required></textarea></label>
+      <button type="submit">构造三维曲面</button>
+    </form><div id="blade-result"></div>
+  </article>
+</section>
+{% endblock %}

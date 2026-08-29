@@ -1,0 +1,6 @@
+<div class="job" {% if job.status in ['queued','running'] %}hx-get="/ui/jobs/{{ job.job_id }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <strong>{{ job.job_type }}</strong><span class="status {{ job.status }}">{{ job.status }}</span>
+  {% if job.error %}<pre>{{ job.error }}</pre>{% endif %}
+  {% if job.result %}<pre>{{ job.result }}</pre>{% endif %}
+</div>
+

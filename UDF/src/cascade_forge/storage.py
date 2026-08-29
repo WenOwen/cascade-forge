@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +40,20 @@ class DatasetStore:
                     schema_version VARCHAR PRIMARY KEY,
                     created_at TIMESTAMP,
                     note VARCHAR
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jobs (
+                    job_id VARCHAR PRIMARY KEY,
+                    job_type VARCHAR,
+                    status VARCHAR,
+                    payload_json VARCHAR,
+                    result_json VARCHAR,
+                    error VARCHAR,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP
                 )
                 """
             )
@@ -118,7 +133,7 @@ class DatasetStore:
     def count(self, origin: str | None = None) -> int:
         if not any(self.geometry_dir.glob("*.parquet")):
             return 0
-        with duckdb.connect(str(self.catalog_path), read_only=True) as connection:
+        with duckdb.connect(str(self.catalog_path)) as connection:
             if origin is None:
                 return int(connection.execute("SELECT count(*) FROM geometries").fetchone()[0])
             return int(
@@ -130,13 +145,13 @@ class DatasetStore:
     def rejected_count(self) -> int:
         if not any(self.rejected_dir.glob("*.parquet")):
             return 0
-        with duckdb.connect(str(self.catalog_path), read_only=True) as connection:
+        with duckdb.connect(str(self.catalog_path)) as connection:
             return int(connection.execute("SELECT count(*) FROM rejected").fetchone()[0])
 
     def geometry_ids(self) -> set[str]:
         if not any(self.geometry_dir.glob("*.parquet")):
             return set()
-        with duckdb.connect(str(self.catalog_path), read_only=True) as connection:
+        with duckdb.connect(str(self.catalog_path)) as connection:
             return {
                 row[0]
                 for row in connection.execute("SELECT geometry_id FROM geometries").fetchall()
@@ -145,7 +160,7 @@ class DatasetStore:
     def get_geometry(self, geometry_id: str) -> AirfoilGeometry | None:
         if not any(self.geometry_dir.glob("*.parquet")):
             return None
-        with duckdb.connect(str(self.catalog_path), read_only=True) as connection:
+        with duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute(
                 "SELECT * FROM geometries WHERE geometry_id = ? LIMIT 1", [geometry_id]
             )
@@ -183,7 +198,7 @@ class DatasetStore:
             ORDER BY geometry_id LIMIT ? OFFSET ?
         """
         parameters.extend([max(1, min(limit, 1000)), max(0, offset)])
-        with duckdb.connect(str(self.catalog_path), read_only=True) as connection:
+        with duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute(query, parameters)
             columns = [item[0] for item in result.description]
             return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
@@ -199,6 +214,56 @@ class DatasetStore:
             files[path.relative_to(self.root).as_posix()] = file_sha256(path)
         files["catalog.duckdb"] = file_sha256(self.catalog_path)
         return files
+
+    def create_job(self, job_type: str, payload: dict[str, Any]) -> str:
+        job_id = "job_" + uuid.uuid4().hex
+        with duckdb.connect(str(self.catalog_path)) as connection:
+            connection.execute(
+                """
+                INSERT INTO jobs VALUES (?, ?, 'queued', ?, NULL, NULL,
+                                         current_timestamp, current_timestamp)
+                """,
+                [job_id, job_type, json.dumps(payload, ensure_ascii=False)],
+            )
+        return job_id
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        with duckdb.connect(str(self.catalog_path)) as connection:
+            connection.execute(
+                """
+                UPDATE jobs SET status = ?, result_json = ?, error = ?,
+                                updated_at = current_timestamp
+                WHERE job_id = ?
+                """,
+                [
+                    status,
+                    json.dumps(result, ensure_ascii=False) if result is not None else None,
+                    error,
+                    job_id,
+                ],
+            )
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        with duckdb.connect(str(self.catalog_path)) as connection:
+            result = connection.execute("SELECT * FROM jobs WHERE job_id = ?", [job_id])
+            row = result.fetchone()
+            if row is None:
+                return None
+            record = dict(zip([item[0] for item in result.description], row, strict=True))
+        for key in ("payload_json", "result_json"):
+            if record[key]:
+                record[key.removesuffix("_json")] = json.loads(record[key])
+            record.pop(key)
+        record["created_at"] = str(record["created_at"])
+        record["updated_at"] = str(record["updated_at"])
+        return record
 
     @staticmethod
     def _next_index(directory: Path) -> int:

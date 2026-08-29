@@ -1,0 +1,3 @@
+<table><thead><tr><th>ID</th><th>来源</th><th>状态</th><th>进口角</th><th>出口角</th><th>t/c</th><th>x_t/c</th></tr></thead>
+<tbody>{% for item in items %}<tr><td><code>{{ item.geometry_id }}</code></td><td>{{ item.origin }}</td><td><span class="status {{ item.validation_status }}">{{ item.validation_status }}</span></td><td>{{ '%.3f'|format(item.inlet_metal_angle_deg) }}</td><td>{{ '%.3f'|format(item.outlet_metal_angle_deg) }}</td><td>{{ '%.5f'|format(item.max_thickness_ratio) }}</td><td>{{ '%.4f'|format(item.max_thickness_x_ratio) }}</td></tr>{% else %}<tr><td colspan="7">数据库尚无记录</td></tr>{% endfor %}</tbody></table>
+

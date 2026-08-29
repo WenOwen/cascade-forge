@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Cascade Forge{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js"></script>
+  <script src="/assets/plotly.min.js"></script>
+</head>
+<body>
+  <header><a href="/">Cascade Forge</a><span>叶型几何数据库 v1</span></header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>
+

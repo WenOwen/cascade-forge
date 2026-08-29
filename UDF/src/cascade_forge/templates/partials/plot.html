@@ -1,0 +1,2 @@
+<div id="{{ plot_id }}" class="plot plot-3d"></div>
+<script>Plotly.newPlot('{{ plot_id }}', {{ plot_json|safe }}.data, {{ plot_json|safe }}.layout, {responsive:true});</script>
