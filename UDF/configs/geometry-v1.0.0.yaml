@@ -1,0 +1,29 @@
+dataset_name: geometry-v1.0.0
+schema_version: "1.0.0"
+generator_version: angle-spline-c2-thickness-v1
+seed: 20260829
+target_valid: 20000
+points_per_side: 201
+batch_size: 512
+parameters:
+  inlet_metal_angle_deg: [20.0, 75.0]
+  turning_angle_deg: [0.0, 65.0]
+  quarter_angle_bias_deg: [-12.0, 12.0]
+  three_quarter_angle_bias_deg: [-12.0, 12.0]
+  max_thickness_ratio: [0.02, 0.15]
+  max_thickness_x_ratio: [0.20, 0.65]
+  leading_edge_radius_ratio: [0.001, 0.015]
+  trailing_edge_thickness_ratio: [0.001, 0.020]
+  trailing_edge_half_wedge_deg: [2.0, 15.0]
+  fore_shape_factor: [0.6, 1.6]
+  aft_shape_factor: [0.6, 1.6]
+constraints:
+  outlet_metal_angle_deg: [-20.0, 65.0]
+  max_abs_camber_ratio: 0.42
+  max_abs_curvature: 250.0
+  max_curvature_gradient: 25000.0
+  min_surface_gap_ratio: 1.0e-7
+cascade_context:
+  solidity: [0.7, 2.2]
+  handedness: [right, left]
+
