@@ -39,4 +39,3 @@ class JobManager:
 
     def shutdown(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=False)
-

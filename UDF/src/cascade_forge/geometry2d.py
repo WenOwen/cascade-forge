@@ -30,22 +30,16 @@ def _angle_schedule(spec: GeometrySpec, x: np.ndarray) -> tuple[np.ndarray, floa
         slopes = np.tan(np.radians(beta_global - stagger_deg))
         return float(np.trapezoid(slopes, x))
 
-    lower = max(-75.0, float(np.min(beta_global)) - 70.0)
-    upper = min(85.0, float(np.max(beta_global)) + 70.0)
-    probes = np.linspace(lower, upper, 281)
-    values_closure = np.array([closure(value) for value in probes])
-    finite = np.isfinite(values_closure) & (np.abs(values_closure) < 1e5)
-    brackets: list[tuple[float, float]] = []
-    for index in range(len(probes) - 1):
-        if not finite[index] or not finite[index + 1]:
-            continue
-        if values_closure[index] == 0 or values_closure[index] * values_closure[index + 1] < 0:
-            brackets.append((probes[index], probes[index + 1]))
-    if not brackets:
-        raise ValueError("角度样条无法形成闭合弦线")
-    target = 0.5 * (inlet + outlet)
-    bracket = min(brackets, key=lambda pair: abs(0.5 * sum(pair) - target))
-    stagger = float(brentq(closure, *bracket, xtol=1e-12))
+    # 在不跨越 tan 奇点的角度支路内，closure 对 stagger 严格单调递减；
+    # 根必定位于 beta_global 的最小值与最大值之间。因此无需逐叶型扫描宽区间。
+    lower = float(np.min(beta_global))
+    upper = float(np.max(beta_global))
+    if upper - lower >= 89.0:
+        raise ValueError("角度样条跨度过大，无法在单一正切支路内闭合")
+    if math.isclose(lower, upper, abs_tol=1e-13):
+        stagger = lower
+    else:
+        stagger = float(brentq(closure, lower, upper, xtol=1e-12))
     local_angle = beta_global - stagger
     return local_angle, stagger
 
@@ -155,4 +149,3 @@ def generate_profile(spec: GeometrySpec) -> AirfoilGeometry:
             "mathematical_kernel": "angle-spline + q-leading-edge/quintic-aft-thickness",
         },
     )
-

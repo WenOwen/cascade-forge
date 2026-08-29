@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -23,6 +24,9 @@ from .models import (
 class DatasetStore:
     """DuckDB 查询目录 + 不可变 Parquet 分区。"""
 
+    _lock_guard = threading.Lock()
+    _catalog_locks: dict[Path, threading.RLock] = {}
+
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
         self.geometry_dir = self.root / "tables" / "geometries"
@@ -30,10 +34,12 @@ class DatasetStore:
         self.geometry_dir.mkdir(parents=True, exist_ok=True)
         self.rejected_dir.mkdir(parents=True, exist_ok=True)
         self.catalog_path = self.root / "catalog.duckdb"
+        with self._lock_guard:
+            self._lock = self._catalog_locks.setdefault(self.catalog_path, threading.RLock())
         self._initialize_catalog()
 
     def _initialize_catalog(self) -> None:
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_info (
@@ -68,11 +74,12 @@ class DatasetStore:
     def refresh_views(self) -> None:
         geometry_files = list(self.geometry_dir.glob("*.parquet"))
         rejected_files = list(self.rejected_dir.glob("*.parquet"))
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             if geometry_files:
                 pattern = _sql_path(self.geometry_dir / "*.parquet")
                 connection.execute(
-                    f"CREATE OR REPLACE VIEW geometries AS SELECT * FROM read_parquet('{pattern}')"
+                    "CREATE OR REPLACE VIEW geometries AS "
+                    f"SELECT * FROM read_parquet('{pattern}', union_by_name = true)"
                 )
             else:
                 connection.execute(
@@ -84,7 +91,8 @@ class DatasetStore:
             if rejected_files:
                 pattern = _sql_path(self.rejected_dir / "*.parquet")
                 connection.execute(
-                    f"CREATE OR REPLACE VIEW rejected AS SELECT * FROM read_parquet('{pattern}')"
+                    "CREATE OR REPLACE VIEW rejected AS "
+                    f"SELECT * FROM read_parquet('{pattern}', union_by_name = true)"
                 )
             else:
                 connection.execute(
@@ -101,9 +109,10 @@ class DatasetStore:
         records = [_geometry_record(*row) for row in rows]
         if not records:
             return None
-        path = self.geometry_dir / f"part-{self._next_index(self.geometry_dir):06d}.parquet"
-        pq.write_table(pa.Table.from_pylist(records), path, compression="zstd")
-        self.refresh_views()
+        with self._lock:
+            path = self.geometry_dir / f"part-{self._next_index(self.geometry_dir):06d}.parquet"
+            pq.write_table(pa.Table.from_pylist(records), path, compression="zstd")
+            self.refresh_views()
         return path
 
     def append_rejected(self, records: list[dict[str, Any]]) -> Path | None:
@@ -125,15 +134,16 @@ class DatasetStore:
                     "created_at": now,
                 }
             )
-        path = self.rejected_dir / f"part-{self._next_index(self.rejected_dir):06d}.parquet"
-        pq.write_table(pa.Table.from_pylist(normalized), path, compression="zstd")
-        self.refresh_views()
+        with self._lock:
+            path = self.rejected_dir / f"part-{self._next_index(self.rejected_dir):06d}.parquet"
+            pq.write_table(pa.Table.from_pylist(normalized), path, compression="zstd")
+            self.refresh_views()
         return path
 
     def count(self, origin: str | None = None) -> int:
         if not any(self.geometry_dir.glob("*.parquet")):
             return 0
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             if origin is None:
                 return int(connection.execute("SELECT count(*) FROM geometries").fetchone()[0])
             return int(
@@ -145,13 +155,13 @@ class DatasetStore:
     def rejected_count(self) -> int:
         if not any(self.rejected_dir.glob("*.parquet")):
             return 0
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             return int(connection.execute("SELECT count(*) FROM rejected").fetchone()[0])
 
     def geometry_ids(self) -> set[str]:
         if not any(self.geometry_dir.glob("*.parquet")):
             return set()
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             return {
                 row[0]
                 for row in connection.execute("SELECT geometry_id FROM geometries").fetchall()
@@ -160,7 +170,7 @@ class DatasetStore:
     def get_geometry(self, geometry_id: str) -> AirfoilGeometry | None:
         if not any(self.geometry_dir.glob("*.parquet")):
             return None
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute(
                 "SELECT * FROM geometries WHERE geometry_id = ? LIMIT 1", [geometry_id]
             )
@@ -198,7 +208,7 @@ class DatasetStore:
             ORDER BY geometry_id LIMIT ? OFFSET ?
         """
         parameters.extend([max(1, min(limit, 1000)), max(0, offset)])
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute(query, parameters)
             columns = [item[0] for item in result.description]
             return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
@@ -212,12 +222,11 @@ class DatasetStore:
         files: dict[str, str] = {}
         for path in sorted((self.root / "tables").rglob("*.parquet")):
             files[path.relative_to(self.root).as_posix()] = file_sha256(path)
-        files["catalog.duckdb"] = file_sha256(self.catalog_path)
         return files
 
     def create_job(self, job_type: str, payload: dict[str, Any]) -> str:
         job_id = "job_" + uuid.uuid4().hex
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             connection.execute(
                 """
                 INSERT INTO jobs VALUES (?, ?, 'queued', ?, NULL, NULL,
@@ -235,7 +244,7 @@ class DatasetStore:
         result: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> None:
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             connection.execute(
                 """
                 UPDATE jobs SET status = ?, result_json = ?, error = ?,
@@ -251,7 +260,7 @@ class DatasetStore:
             )
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
-        with duckdb.connect(str(self.catalog_path)) as connection:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute("SELECT * FROM jobs WHERE job_id = ?", [job_id])
             row = result.fetchone()
             if row is None:

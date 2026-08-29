@@ -4,6 +4,7 @@ from pathlib import Path
 
 import yaml
 
+from cascade_forge.audit import audit_dataset
 from cascade_forge.features import extract_features
 from cascade_forge.geometry2d import generate_profile
 from cascade_forge.models import GeometrySpec
@@ -40,9 +41,7 @@ def test_store_round_trip(tmp_path: Path) -> None:
 
 
 def test_sobol_is_reproducible() -> None:
-    config = yaml.safe_load(
-        Path("configs/geometry-v1.0.0.yaml").read_text(encoding="utf-8")
-    )
+    config = yaml.safe_load(Path("configs/geometry-v1.0.0.yaml").read_text(encoding="utf-8"))
     assert sobol_specs(config, 16) == sobol_specs(config, 16)
 
 
@@ -53,4 +52,6 @@ def test_small_dataset_generation(tmp_path: Path) -> None:
     store = DatasetStore(tmp_path / "dataset")
     assert len(store.geometry_ids()) == 12
     assert (tmp_path / "dataset" / "dataset_manifest.json").exists()
-
+    report = audit_dataset(tmp_path / "dataset", rebuild_sample=12)
+    assert report["valid"]
+    assert report["counts"]["unique_geometry_ids"] == 12

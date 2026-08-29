@@ -24,6 +24,13 @@ from .validation import validate_profile
 ROWS = ("R1", "R2", "S1", "S2")
 
 
+def _copy_unless_same(source: Path, destination: Path) -> None:
+    """复制溯源文件；源与目标相同时保持幂等。"""
+
+    if source.resolve() != destination.resolve():
+        shutil.copy2(source, destination)
+
+
 def ingest_legacy_anchors(
     source: str | Path,
     output_root: str | Path,
@@ -51,13 +58,13 @@ def ingest_legacy_anchors(
         row_destination = destination / row_name
         row_destination.mkdir(parents=True, exist_ok=True)
         copied_metadata = row_destination / "section_metadata.json"
-        shutil.copy2(metadata_path, copied_metadata)
+        _copy_unless_same(metadata_path, copied_metadata)
 
         for section in metadata["sections"]:
             filename = metadata["filename_pattern"].format(suffix=section["suffix"])
             source_path = row_source / filename
             copied_path = row_destination / filename
-            shutil.copy2(source_path, copied_path)
+            _copy_unless_same(source_path, copied_path)
             source_hash = file_sha256(source_path)
             geometry = _anchor_geometry(row_name, section, source_path, source_hash)
             report = validate_profile(geometry)
@@ -88,6 +95,9 @@ def ingest_legacy_anchors(
         "entries": manifest_entries,
     }
     manifest_path = destination / "source_manifest.json"
+    if source == destination and manifest_path.exists():
+        # 精选归档再次导入数据库时，保留首次迁移记录中的原始旧库路径与时间戳。
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     return manifest
 
@@ -112,9 +122,12 @@ def legacy_section_schedule(
     for section in metadata["sections"]:
         filename = metadata["filename_pattern"].format(suffix=section["suffix"])
         source_hash = file_sha256(row_root / filename)
-        geometry_id = "geo_anchor_" + hashlib.sha256(
-            f"{row_name}:{section['suffix']}:{source_hash}".encode()
-        ).hexdigest()[:20]
+        geometry_id = (
+            "geo_anchor_"
+            + hashlib.sha256(f"{row_name}:{section['suffix']}:{source_hash}".encode()).hexdigest()[
+                :20
+            ]
+        )
         span = (float(section["radius_in"]) - ref_hub) / (ref_tip - ref_hub)
         sections.append(
             SectionDefinition(
@@ -189,15 +202,14 @@ def _anchor_geometry(
     warnings: list[str] = []
     rte_ratio = float(section["rte"]) / chord
     if rte_ratio > 0.02:
-        warnings.append(
-            f"可疑尾缘半径：rte/c={rte_ratio:.6f}；保留原始值，未静默修正"
-        )
+        warnings.append(f"可疑尾缘半径：rte/c={rte_ratio:.6f}；保留原始值，未静默修正")
     tmax = float(np.max(thickness))
     xt = float(target[int(np.argmax(thickness))])
     out_of_domain = not (0.02 <= tmax <= 0.15 and 0.20 <= xt <= 0.65)
-    geometry_id = "geo_anchor_" + hashlib.sha256(
-        f"{row_name}:{section['suffix']}:{source_hash}".encode()
-    ).hexdigest()[:20]
+    geometry_id = (
+        "geo_anchor_"
+        + hashlib.sha256(f"{row_name}:{section['suffix']}:{source_hash}".encode()).hexdigest()[:20]
+    )
     return AirfoilGeometry(
         geometry_id=geometry_id,
         origin="anchor",

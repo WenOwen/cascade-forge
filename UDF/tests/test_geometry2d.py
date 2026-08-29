@@ -67,4 +67,3 @@ def test_invalid_outlet_angle_rejected() -> None:
             fore_shape_factor=1.0,
             aft_shape_factor=1.0,
         )
-

@@ -15,9 +15,7 @@ from .models import (
     payload_sha256,
 )
 
-GeometrySource: TypeAlias = (
-    Mapping[str, AirfoilGeometry] | Callable[[str], AirfoilGeometry | None]
-)
+GeometrySource: TypeAlias = Mapping[str, AirfoilGeometry] | Callable[[str], AirfoilGeometry | None]
 
 
 def build_blade(schedule: SectionSchedule, geometry_source: GeometrySource) -> BladeSurface:
@@ -63,12 +61,15 @@ def build_blade(schedule: SectionSchedule, geometry_source: GeometrySource) -> B
                 f"{upper_geometry.geometry_id} 的线性坐标插值"
             )
 
-    blade_id = "blade_" + payload_sha256(
-        {
-            "schedule": schedule.model_dump(mode="json"),
-            "sections": [section.geometry_id for section in sections],
-        }
-    )[:24]
+    blade_id = (
+        "blade_"
+        + payload_sha256(
+            {
+                "schedule": schedule.model_dump(mode="json"),
+                "sections": [section.geometry_id for section in sections],
+            }
+        )[:24]
+    )
     return BladeSurface(
         blade_id=blade_id,
         schedule=schedule,
@@ -84,9 +85,7 @@ def _resolve(source: GeometrySource, geometry_id: str) -> AirfoilGeometry:
     return geometry
 
 
-def _bracket(
-    definitions: list[SectionDefinition], span: float
-) -> tuple[int, int, float]:
+def _bracket(definitions: list[SectionDefinition], span: float) -> tuple[int, int, float]:
     spans = np.asarray([definition.span_fraction for definition in definitions])
     if span <= spans[0] + 1e-14:
         return 0, 0, 0.0
@@ -113,9 +112,7 @@ def _interpolate_definition(
         return lower.model_copy(update={"span_fraction": span})
 
     def blend(name: str) -> float:
-        return (1.0 - weight) * float(getattr(lower, name)) + weight * float(
-            getattr(upper, name)
-        )
+        return (1.0 - weight) * float(getattr(lower, name)) + weight * float(getattr(upper, name))
 
     return SectionDefinition(
         span_fraction=span,

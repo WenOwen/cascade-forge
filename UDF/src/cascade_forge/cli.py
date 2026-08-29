@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from .audit import audit_dataset
 from .blade3d import build_blade
 from .geomturbo import export_geomturbo
 from .legacy import ingest_legacy_anchors, legacy_section_schedule
@@ -52,14 +53,10 @@ def generate_command(
 
 @app.command("audit")
 def audit_command(dataset: Annotated[Path, typer.Option(exists=True, file_okay=False)]) -> None:
-    store = DatasetStore(dataset)
-    summary = {
-        "total": store.count(),
-        "generated": store.count("generated"),
-        "anchors": store.count("anchor"),
-        "rejected_proposals": store.rejected_count(),
-    }
+    summary = audit_dataset(dataset)
     typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+    if not summary["valid"]:
+        raise typer.Exit(code=1)
 
 
 @app.command("export")

@@ -41,9 +41,7 @@ def export_geomturbo(blade: BladeSurface, destination: str | Path) -> Path:
         for index, section in enumerate(blade.sections, start=1):
             coordinates = np.asarray(getattr(section, f"{side}_xyz"), dtype=float)
             lines.extend([f"#SECTION  {index}", "XYZ", str(len(coordinates))])
-            lines.extend(
-                f"{x:.12E} {y:.12E} {z:.12E}" for x, y, z in coordinates
-            )
+            lines.extend(f"{x:.12E} {y:.12E} {z:.12E}" for x, y, z in coordinates)
     destination.write_text("\n".join(lines) + "\n", encoding="ascii")
 
     manifest = {

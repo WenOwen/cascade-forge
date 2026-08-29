@@ -102,9 +102,7 @@ def create_app(dataset_root: str | Path) -> FastAPI:
         config_path = Path(body.config_path).resolve() if body.config_path else DEFAULT_CONFIG
 
         def run() -> dict[str, Any]:
-            manifest = generate_dataset(
-                config_path, dataset_root, target_valid=body.target_valid
-            )
+            manifest = generate_dataset(config_path, dataset_root, target_valid=body.target_valid)
             return manifest.model_dump(mode="json")
 
         job_id = jobs.submit("generate_dataset", body.model_dump(mode="json"), run)

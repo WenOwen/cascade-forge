@@ -64,9 +64,9 @@ class GeometrySpec(BaseModel):
 
     @property
     def geometry_id(self) -> str:
-        raw = json.dumps(
-            self.canonical_payload(), sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        raw = json.dumps(self.canonical_payload(), sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         return "geo_" + hashlib.sha256(raw).hexdigest()[:24]
 
 
@@ -211,9 +211,7 @@ def file_sha256(path: str | Path) -> str:
 
 
 def payload_sha256(payload: Any) -> str:
-    raw = json.dumps(_round_floats(payload), sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    raw = json.dumps(_round_floats(payload), sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 

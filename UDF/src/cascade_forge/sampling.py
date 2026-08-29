@@ -147,4 +147,3 @@ def generate_dataset(
 
 def _jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=lambda item: getattr(item, "value", str(item))))
-

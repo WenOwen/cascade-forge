@@ -21,9 +21,7 @@ def validate_profile(
 
     def error(code: str, message: str, value=None, limit=None) -> None:
         issues.append(
-            ValidationIssue(
-                code=code, severity="error", message=message, value=value, limit=limit
-            )
+            ValidationIssue(code=code, severity="error", message=message, value=value, limit=limit)
         )
 
     def warning(code: str, message: str, value=None, limit=None) -> None:
@@ -60,10 +58,13 @@ def validate_profile(
         error("polygon_area", "叶型多边形面积退化", features.signed_area, "abs(area)>1e-10")
     if features.max_camber_ratio > 0.42:
         error("excessive_camber", "最大弯度超出生成域", features.max_camber_ratio, 0.42)
-    if max(
-        features.suction_max_abs_curvature,
-        features.pressure_max_abs_curvature,
-    ) > 250.0:
+    if (
+        max(
+            features.suction_max_abs_curvature,
+            features.pressure_max_abs_curvature,
+        )
+        > 250.0
+    ):
         error(
             "curvature_spike",
             "非前尾缘区域曲率过大",
@@ -79,9 +80,7 @@ def validate_profile(
         )
 
     if geometry.spec is not None:
-        thickness_error = abs(
-            features.max_thickness_ratio - geometry.spec.max_thickness_ratio
-        )
+        thickness_error = abs(features.max_thickness_ratio - geometry.spec.max_thickness_ratio)
         if thickness_error > 5e-4:
             error("tmax_mismatch", "最大厚度未达到目标", thickness_error, 5e-4)
         x_error = abs(features.max_thickness_x_ratio - geometry.spec.max_thickness_x_ratio)
