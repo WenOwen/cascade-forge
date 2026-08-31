@@ -213,4 +213,16 @@ Bezier 中弧线使用 4 个控制点；B-spline/NURBS 中弧线基础模式使�
 - 主画布显示完整闭合轮廓、中弧线和控制多边形；分析标签页显示厚度、曲率、曲率梯度和角度；LE/TE 局部视图显示真实圆弧、圆心、接触点、切线与 `r/c`。
 - Plotly 统一通过 `Plotly.react`、唯一 DOM ID、`ResizeObserver`、`htmx:afterSettle` 与窗口 resize 管理；容器均设置 `width: 100%` 和 `min-width: 0`。
 - Playwright CLI 在 320、375、768、1024 和 1440 px 实机验证：十个页面均无水平溢出，Plotly modebar 未越出容器；移动端侧栏抽屉开合正常；高级模式和控制点拖拽会触发 Python 预览并改变 Geometry ID。关键截图保存在 Git 忽略的 `output/playwright/`。
-- Ruff、JavaScript `node --check` 与 40 项 pytest 全部通过；测试覆盖公共能力到 UI 的映射、离线资源、工作台页面、三维即时预览和既有 v1/v2 API 回归。
+- Ruff、JavaScript `node --check` 与 41 项 pytest 全部通过；测试覆盖公共能力到 UI 的映射、离线资源、工作台页面、三维即时预览和既有 v1/v2 API 回归。
+
+### 2026-08-31：`geometry-v2.0.0` 正式交付审计
+
+- 固定配置：seed `20260831`、每侧 201 点、批次 256、8 个生成进程；正式库位于 `datasets/geometry-v2.0.0/`，约 435.1 MB，数据目录由 Git 忽略。
+- 生成配额严格为 20,000：2,222 个共享意图组各含九种曲线组合，共 19,998 条；另含 `Bezier×B-spline` 与 `NURBS×NURBS` 各一条。20,000 个 Geometry ID 全部唯一。
+- Sobol 共考察 2,624 个提案，其中 400 个提案被拒绝；一个提案可能包含多个失败规则，因此原因频数大于拒绝提案数。失败参数与原因保留，失败坐标不入库。
+- 生成记录状态为 7,508 个 `valid`、12,492 个 `warning`、0 个 `rejected`；warning 主要表示中央曲面曲率梯度偏高，不违反正厚度、无自交、边缘圆弧、厚度、位置与金属角硬门槛，也不代表气动性能评级。
+- 48 个 NASA 原始锚点和 432 个九组合派生拟合全部可追溯。拟合误差门槛下有 5 个 `warning`、427 个 `rejected`、0 个 `valid`；拒绝拟合仍保留显式 spec、RMS、最大点距、Hausdorff 近似和来源 ID。该结果表明当前 v2 内核不是这些历史截面的高保真逆向表示，不应把派生拟合当作锚点替代品。
+- 全量审计最坏值：轮廓闭合 `0c`，法向偏置 `7.5235e-17c`，LE 半径误差 `1.0114e-13c`，TE 半径误差 `9.6090e-14c`，最大厚度误差 `3.9653e-4c`，最大厚度位置误差 `0.0049993c`，金属角误差 `0.0073788°`，全部满足冻结门槛。
+- 按 Geometry ID 确定性抽取 128 条正式记录重建，ID 与逐点坐标最大误差均为 0；再次运行同一生成命令前后 Parquet 文件数均为 173，证明中断恢复不会重复追加。
+- manifest 记录 173 个 Parquet SHA-256 和 86 个批次 manifest；全量哈希、配额、九组合完整性、定长坐标、锚点数量和重建审计均通过。
+- 最终工具链验收：Ruff 与格式检查通过，JavaScript `node --check` 通过，41 项 pytest 通过；`uv build` 成功生成 sdist 与 wheel；v1 正式库回归审计和 v2 正式库复审均为 `valid: true`。测试环境仅有一项来自 Starlette 的 `httpx` TestClient 弃用提示，不影响当前测试结果。
