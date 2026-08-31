@@ -110,7 +110,15 @@ def _half_thickness(spec: GeometrySpec, x: np.ndarray) -> np.ndarray:
     return thickness
 
 
-def generate_profile(spec: GeometrySpec) -> AirfoilGeometry:
+def generate_profile(spec):
+    if getattr(spec, "schema_version", None) == "2.0.0":
+        from .geometry_v2 import generate_profile_v2
+
+        return generate_profile_v2(spec)
+    return _generate_profile_v1(spec)
+
+
+def _generate_profile_v1(spec: GeometrySpec) -> AirfoilGeometry:
     """由角度样条中弧线和 C2 厚度分布生成弦长归一化叶型。"""
 
     dense_count = max(1001, spec.points_per_side * 4 + 1)
