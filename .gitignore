@@ -9,5 +9,6 @@ UDF/dist/
 UDF/artifacts/
 UDF/datasets/
 UDF/logs/
+UDF/output/
+UDF/.playwright-cli/
 *.duckdb.wal
-

@@ -95,6 +95,9 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         assert exported.status_code == 200
         imported = client.post("/api/v2/workspace/import", json=exported.json())
         assert imported.status_code == 201
+        fits = client.get("/api/v2/anchor-fits")
+        assert fits.status_code == 200
+        assert fits.json()["total"] == 0
 
 
 def test_v2_blade_job_and_artifact_download(tmp_path) -> None:
@@ -122,6 +125,11 @@ def test_v2_blade_job_and_artifact_download(tmp_path) -> None:
         ],
     )
     with TestClient(create_app(v1_root, v2_dataset_root=v2_root)) as client:
+        preview = client.post(
+            "/api/v2/blades/preview", json=schedule.model_dump(mode="json")
+        )
+        assert preview.status_code == 200
+        assert len(preview.json()["sections"]) == 2
         response = client.post("/api/v2/blades", json=schedule.model_dump(mode="json"))
         assert response.status_code == 202
         job = _wait(client, response.json()["job_id"])

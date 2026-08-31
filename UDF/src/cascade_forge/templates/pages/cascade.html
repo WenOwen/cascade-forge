@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block page_title %}叶栅检查{% endblock %}
+{% block content %}
+<div class="two-column"><article class="surface-card"><form class="stack-form" data-cascade-form><label>Geometry ID<input name="geometry_id" required placeholder="geo_v2_…"></label><label>稠度 σ <output data-for="solidity">1.20</output><input type="range" name="solidity" min="0.7" max="2.2" step="0.01" value="1.2"></label><button class="button primary" type="submit">执行叶栅检查</button></form><div class="result-summary" data-cascade-summary></div></article><article class="surface-card"><div id="cascade-chart" class="plotly-chart large-chart empty-chart" data-empty="输入叶型后显示三个相邻节距"></div></article></div>
+{% endblock %}

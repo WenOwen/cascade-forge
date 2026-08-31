@@ -205,3 +205,12 @@ Bezier 中弧线使用 4 个控制点；B-spline/NURBS 中弧线基础模式使�
 - CLI 保持 v1 默认行为；`generate --dataset-version 2.0.0` 选择 v2，新增 `fit-anchors`、`workspace-list`、`workspace-import` 和 `workspace-export`。
 - `export`、`build-blade`、`audit` 和 `serve` 根据 manifest/schema 自动选择 v1/v2 数据源。
 - Ruff 与 38 项 pytest 全部通过；新增 API 测试覆盖 v2 预览、解析、检索、比较、叶栅、workspace、三维任务和 GeomTurbo 制品下载，同时原 `/api/v1` 回归保持通过。
+
+### v2 Web 工作台记录（2026-08-31）
+
+- Web 已重构为固定侧栏、轻量工具栏和响应式内容区，完整提供总览、叶型工作室、数据库、叶型比较、叶栅检查、NASA 锚点、三维叶片、数据集与批次、审计、Jobs 与制品十个入口；`ui-capabilities.yaml` 将全部公共工作流映射到对应 UI 与 `/api/v2` 接口。
+- 叶型工作室支持基础/高级模式、九种曲线族组合、双侧厚度联动开关、显式 spec 导入导出、workspace 保存和控制点拖拽。所有预览、拖拽及图表数据均由 Python 内核返回，浏览器不复制几何算法。
+- 主画布显示完整闭合轮廓、中弧线和控制多边形；分析标签页显示厚度、曲率、曲率梯度和角度；LE/TE 局部视图显示真实圆弧、圆心、接触点、切线与 `r/c`。
+- Plotly 统一通过 `Plotly.react`、唯一 DOM ID、`ResizeObserver`、`htmx:afterSettle` 与窗口 resize 管理；容器均设置 `width: 100%` 和 `min-width: 0`。
+- Playwright CLI 在 320、375、768、1024 和 1440 px 实机验证：十个页面均无水平溢出，Plotly modebar 未越出容器；移动端侧栏抽屉开合正常；高级模式和控制点拖拽会触发 Python 预览并改变 Geometry ID。关键截图保存在 Git 忽略的 `output/playwright/`。
+- Ruff、JavaScript `node --check` 与 40 项 pytest 全部通过；测试覆盖公共能力到 UI 的映射、离线资源、工作台页面、三维即时预览和既有 v1/v2 API 回归。

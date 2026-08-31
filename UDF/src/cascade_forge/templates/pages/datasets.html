@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block page_title %}数据集与批次{% endblock %}
+{% block content %}
+<div class="two-column" data-dataset-root><article class="surface-card"><p class="eyebrow">GENERATION</p><h2>geometry-v2.0.0</h2><form class="stack-form" data-batch-form><label>目标有效叶型<input name="target_valid" type="number" min="1" max="100000" value="20000"></label><label>并行进程<input name="workers" type="number" min="1" max="64" value="{{ default_workers }}"></label><button class="button primary" type="submit">创建或恢复批次</button></form><div class="progress-track"><span data-batch-progress></span></div><div class="result-summary" data-batch-status></div></article><article class="surface-card"><div class="card-heading"><div><p class="eyebrow">IMMUTABLE DATASET</p><h2>当前状态</h2></div><a class="button" href="/api/v2/dataset/manifest">下载 manifest</a></div><dl class="definition-grid"><dt>生成记录</dt><dd>{{ v2_generated }}</dd><dt>拒绝提案</dt><dd>{{ v2_rejected }}</dd><dt>完整 intent 组</dt><dd>{{ v2_groups }}</dd><dt>schema</dt><dd>2.0.0</dd></dl><p class="muted">正式 Parquet 分区只追加。手工设计必须先保存在 workspace，再提交为新的版本化数据集。</p></article></div>
+{% endblock %}

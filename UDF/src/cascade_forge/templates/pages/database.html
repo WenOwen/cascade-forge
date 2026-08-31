@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block page_title %}数据库{% endblock %}
+{% block content %}
+<section class="surface-card" data-database-root>
+  <form class="filter-bar" data-database-filters><label>中弧线<select name="camber_family"><option value="">全部</option><option value="bezier">Bezier</option><option value="bspline">B-spline</option><option value="nurbs">NURBS</option></select></label><label>厚度<select name="thickness_family"><option value="">全部</option><option value="bezier">Bezier</option><option value="bspline">B-spline</option><option value="nurbs">NURBS</option></select></label><label>状态<select name="status"><option value="">全部</option><option value="valid">有效</option><option value="warning">警告</option><option value="rejected">拒绝</option></select></label><label>排序<select name="sort"><option value="geometry_id">Geometry ID</option><option value="max_thickness_ratio">最大厚度</option><option value="max_thickness_x_ratio">厚度位置</option><option value="inlet_metal_angle_deg">进口角</option></select></label><button class="button primary" type="submit">应用筛选</button></form>
+  <div class="table-toolbar"><span data-database-count>0 条记录</span><div class="button-row"><button class="button" data-compare-selected disabled>比较所选</button><button class="button" data-export-selected disabled>导出</button></div></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th></th><th>Geometry ID</th><th>曲线组合</th><th>状态</th><th>tmax/c</th><th>xt/c</th><th>进口角</th><th></th></tr></thead><tbody data-database-body></tbody></table></div>
+  <div class="pagination"><button class="button" data-page-prev>上一页</button><span data-page-label>第 1 页</span><button class="button" data-page-next>下一页</button></div>
+</section>
+<dialog id="geometry-detail"><div class="detail-dialog"><button class="dialog-close" type="button" data-close-dialog>×</button><div data-detail-content></div></div></dialog>
+{% endblock %}

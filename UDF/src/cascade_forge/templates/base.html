@@ -2,15 +2,34 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
   <title>{% block title %}Cascade Forge{% endblock %}</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/htmx.min.js"></script>
-  <script src="/assets/plotly.min.js"></script>
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/assets/plotly.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
-<body>
-  <header><a href="/">Cascade Forge</a><span>叶型几何数据库 v1</span></header>
-  <main>{% block content %}{% endblock %}</main>
+<body data-page="{{ page|default('overview') }}">
+  <button class="sidebar-toggle" type="button" aria-label="打开导航" data-sidebar-toggle>☰</button>
+  <div class="sidebar-scrim" data-sidebar-scrim></div>
+  <aside class="sidebar" aria-label="主导航">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">CF</span><span><strong>Cascade Forge</strong><small>Geometry Workbench</small></span></a>
+    {% set navigation = [
+      ('overview','/','总览','⌂'), ('studio','/studio','叶型工作室','◇'),
+      ('database','/database','数据库','▦'), ('compare','/compare','叶型比较','⇄'),
+      ('cascade','/cascade','叶栅检查','≋'), ('anchors','/anchors','NASA 锚点','◎'),
+      ('blade','/blade','三维叶片','△'), ('datasets','/datasets','数据集与批次','▤'),
+      ('audit','/audit','审计','✓'), ('jobs','/jobs','Jobs 与制品','◷')
+    ] %}
+    <nav>{% for key, href, label, icon in navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}</nav>
+    <div class="sidebar-footer"><span class="status-dot"></span><span>本地离线</span><small>schema 2.0.0</small></div>
+  </aside>
+  <main class="workspace-shell">
+    <header class="toolbar"><div><p class="toolbar-kicker">CASCADE FORGE</p><h1>{% block page_title %}总览{% endblock %}</h1></div><div class="toolbar-actions">{% block toolbar_actions %}{% endblock %}</div></header>
+    <div id="global-notice" class="global-notice" role="status" aria-live="polite"></div>
+    <div class="page-content">{% block content %}{% endblock %}</div>
+  </main>
 </body>
 </html>
-

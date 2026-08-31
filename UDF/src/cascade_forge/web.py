@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import plotly.graph_objects as go
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -15,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from .audit_v2 import audit_dataset_v2
 from .blade3d import build_blade
-from .features import extract_features
+from .features import curve_curvature, extract_features
 from .fitting_v2 import fit_anchors_to_dataset
 from .geometry2d import generate_profile
 from .geometry_v2 import resolve_geometry_spec
@@ -116,14 +118,76 @@ def create_app(
     def home(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
-            "index.html",
-            {
-                "total": store.count(),
-                "generated": store.count("generated"),
-                "anchors": store.count("anchor"),
-                "rejected": store.rejected_count(),
-                "default_spec": _default_spec().model_dump(mode="json"),
-            },
+            "pages/overview.html",
+            _page_context("overview", store_v2, workspace),
+        )
+
+    @application.get("/studio", response_class=HTMLResponse)
+    def studio_page(request: Request) -> HTMLResponse:
+        context = _page_context("studio", store_v2, workspace)
+        context["default_spec_v2"] = _default_spec_v2().model_dump(mode="json")
+        return templates.TemplateResponse(request, "pages/studio.html", context)
+
+    @application.get("/database", response_class=HTMLResponse)
+    def database_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/database.html",
+            _page_context("database", store_v2, workspace),
+        )
+
+    @application.get("/compare", response_class=HTMLResponse)
+    def compare_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/compare.html",
+            _page_context("compare", store_v2, workspace),
+        )
+
+    @application.get("/cascade", response_class=HTMLResponse)
+    def cascade_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/cascade.html",
+            _page_context("cascade", store_v2, workspace),
+        )
+
+    @application.get("/anchors", response_class=HTMLResponse)
+    def anchors_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/anchors.html",
+            _page_context("anchors", store_v2, workspace),
+        )
+
+    @application.get("/blade", response_class=HTMLResponse)
+    def blade_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/blade.html",
+            _page_context("blade", store_v2, workspace),
+        )
+
+    @application.get("/datasets", response_class=HTMLResponse)
+    def datasets_page(request: Request) -> HTMLResponse:
+        context = _page_context("datasets", store_v2, workspace)
+        context["default_workers"] = min(8, max(1, (os.cpu_count() or 2) - 1))
+        return templates.TemplateResponse(request, "pages/datasets.html", context)
+
+    @application.get("/audit", response_class=HTMLResponse)
+    def audit_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/audit.html",
+            _page_context("audit", store_v2, workspace),
+        )
+
+    @application.get("/jobs", response_class=HTMLResponse)
+    def jobs_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "pages/jobs.html",
+            _page_context("jobs", store_v2, workspace),
         )
 
     @application.get("/assets/plotly.min.js")
@@ -400,6 +464,19 @@ def create_app(
         job_id = jobs_v2.submit("fit_anchors_v2", body.model_dump(mode="json"), run)
         return {"job_id": job_id, "status": "queued"}
 
+    @application.get("/api/v2/anchor-fits")
+    def list_anchor_fits_v2(
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0),
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "items": store_v2.list_anchor_fits(limit=limit, offset=offset, status=status),
+            "total": store_v2.fit_count(),
+            "limit": limit,
+            "offset": offset,
+        }
+
     @application.get("/api/v2/audit")
     def audit_v2(rebuild_sample: int = Query(8, ge=0, le=256)) -> dict[str, Any]:
         return audit_dataset_v2(
@@ -432,6 +509,14 @@ def create_app(
 
         job_id = jobs_v2.submit("build_blade_v2", schedule.model_dump(mode="json"), run)
         return {"job_id": job_id, "status": "queued"}
+
+    @application.post("/api/v2/blades/preview")
+    def preview_blade_v2(schedule: SectionSchedule) -> dict[str, Any]:
+        try:
+            blade = build_blade(schedule, store_v2.get_geometry)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return blade.model_dump(mode="json")
 
     @application.get("/api/v2/artifacts/{artifact_path:path}")
     def download_artifact_v2(artifact_path: str) -> FileResponse:
@@ -577,11 +662,59 @@ def _default_spec() -> GeometrySpec:
     )
 
 
+def _default_spec_v2() -> GeometrySpecV2:
+    from .models_v2 import GeometryIntentV2
+
+    return GeometrySpecV2(
+        intent=GeometryIntentV2(
+            inlet_metal_angle_deg=55.0,
+            turning_angle_deg=25.0,
+            max_thickness_ratio=0.10,
+            max_thickness_x_ratio=0.42,
+            leading_edge_radius_ratio=0.008,
+            trailing_edge_radius_ratio=0.002,
+            trailing_edge_half_wedge_deg=8.0,
+        )
+    )
+
+
+def _page_context(page: str, store: DatasetStoreV2, workspace: WorkspaceStore) -> dict[str, Any]:
+    return {
+        "page": page,
+        "v2_generated": store.count("generated"),
+        "v2_anchors": store.anchor_count(),
+        "v2_fits": store.fit_count(),
+        "v2_rejected": store.rejected_count(),
+        "v2_groups": store.complete_group_count(),
+        "workspace_count": len(workspace.list_designs(limit=1000)),
+    }
+
+
 def _geometry_payload(geometry) -> dict[str, Any]:
+    suction, pressure, camber, thickness = geometry.arrays()
+    suction_curvature, suction_s = curve_curvature(suction)
+    pressure_curvature, pressure_s = curve_curvature(pressure)
+    camber_delta = np.gradient(camber, axis=0, edge_order=2)
+    angle = np.degrees(np.arctan2(camber_delta[:, 1], camber_delta[:, 0]))
     return {
         "geometry": geometry.model_dump(mode="json"),
         "features": extract_features(geometry).model_dump(mode="json"),
         "validation": validate_profile(geometry).model_dump(mode="json"),
+        "analysis": {
+            "camber_x": camber[:, 0].tolist(),
+            "thickness": thickness.tolist(),
+            "suction_s": suction_s.tolist(),
+            "pressure_s": pressure_s.tolist(),
+            "suction_curvature": suction_curvature.tolist(),
+            "pressure_curvature": pressure_curvature.tolist(),
+            "suction_curvature_gradient": np.gradient(
+                suction_curvature, suction_s, edge_order=2
+            ).tolist(),
+            "pressure_curvature_gradient": np.gradient(
+                pressure_curvature, pressure_s, edge_order=2
+            ).tolist(),
+            "angle_deg": angle.tolist(),
+        },
     }
 
 

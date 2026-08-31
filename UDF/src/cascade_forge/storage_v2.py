@@ -306,11 +306,56 @@ class DatasetStoreV2:
                 row[0] for row in connection.execute("SELECT fit_id FROM anchor_fits_v2").fetchall()
             }
 
+    def list_anchor_fits(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if not any(self.fit_dir.glob("*.parquet")):
+            return []
+        where = " WHERE fit_status = ?" if status else ""
+        parameters: list[Any] = [status] if status else []
+        parameters.extend([max(1, min(limit, 1000)), max(0, offset)])
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            result = connection.execute(
+                """
+                SELECT fit_id, source_anchor_id, geometry_id, camber_family,
+                       thickness_family, rms_distance_ratio, max_distance_ratio,
+                       hausdorff_approx_ratio, fit_status, source_warnings
+                FROM anchor_fits_v2
+                """
+                + where
+                + " ORDER BY source_anchor_id, camber_family, thickness_family "
+                "LIMIT ? OFFSET ?",
+                parameters,
+            )
+            columns = [column[0] for column in result.description]
+            return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
+
     def anchor_count(self) -> int:
         if not any(self.anchor_dir.glob("*.parquet")):
             return 0
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             return int(connection.execute("SELECT count(*) FROM anchors_v1").fetchone()[0])
+
+    def complete_group_count(self) -> int:
+        if not any(self.geometry_dir.glob("*.parquet")):
+            return 0
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            return int(
+                connection.execute(
+                    """
+                    SELECT count(*) FROM (
+                      SELECT intent_group_index
+                      FROM geometries_v2
+                      WHERE origin = 'generated' AND NOT is_extra
+                      GROUP BY intent_group_index HAVING count(*) = 9
+                    )
+                    """
+                ).fetchone()[0]
+            )
 
     def geometry_ids(self) -> set[str]:
         if not any(self.geometry_dir.glob("*.parquet")):

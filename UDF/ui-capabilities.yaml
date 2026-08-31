@@ -1,0 +1,51 @@
+schema_version: "2.0.0"
+capabilities:
+  generate_profile:
+    ui: /studio
+    api: POST /api/v2/preview
+  resolve_curve_controls:
+    ui: /studio
+    api: POST /api/v2/curves/resolve
+  validate_profile:
+    ui: /studio
+    api: POST /api/v2/preview
+  extract_features:
+    ui: /studio
+    api: POST /api/v2/preview
+  workspace_save_import_export:
+    ui: /studio
+    api: POST /api/v2/workspace/designs
+    cli: workspace-list, workspace-import, workspace-export
+  database_query_export:
+    ui: /database
+    api: GET /api/v2/geometries
+    cli: export
+  compare_profiles:
+    ui: /compare
+    api: POST /api/v2/compare
+  validate_cascade:
+    ui: /cascade
+    api: POST /api/v2/cascade
+  fit_anchors:
+    ui: /anchors
+    api: POST /api/v2/anchor-fits
+    cli: fit-anchors
+  build_blade:
+    ui: /blade
+    api: POST /api/v2/blades
+    cli: build-blade
+  export_geomturbo:
+    ui: /blade
+    api: GET /api/v2/artifacts/{artifact_path}
+    cli: build-blade
+  generate_dataset:
+    ui: /datasets
+    api: POST /api/v2/batches
+    cli: generate
+  audit_dataset:
+    ui: /audit
+    api: GET /api/v2/audit
+    cli: audit
+  jobs_and_artifacts:
+    ui: /jobs
+    api: GET /api/v2/jobs
