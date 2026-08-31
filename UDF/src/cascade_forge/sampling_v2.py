@@ -23,7 +23,7 @@ from .models_v2 import (
     GeometrySpecV2,
 )
 from .storage_v2 import DatasetStoreV2
-from .validation import validate_profile
+from .validation_v2 import validate_profile_v2
 
 INTENT_PARAMETER_ORDER = [
     "inlet_metal_angle_deg",
@@ -292,7 +292,8 @@ def _evaluate_proposal(payload: dict[str, Any]) -> dict[str, Any]:
                 points_per_side=int(payload["points_per_side"]),
             )
             geometry = generate_profile(spec)
-            report = validate_profile(geometry)
+            features = extract_features(geometry)
+            report = validate_profile_v2(geometry, features=features)
             if not report.valid:
                 reasons.extend(
                     {
@@ -303,7 +304,7 @@ def _evaluate_proposal(payload: dict[str, Any]) -> dict[str, Any]:
                     for issue in report.issues
                     if issue.severity == "error"
                 )
-            rows.append((geometry, extract_features(geometry), report))
+            rows.append((geometry, features, report))
         except (ValueError, np.linalg.LinAlgError, FloatingPointError) as exc:
             reasons.append(
                 {

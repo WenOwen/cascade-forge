@@ -18,6 +18,7 @@ from .models_v2 import (
     BezierCurveSpec,
     BSplineCurveSpec,
     CurveFamily,
+    DatasetManifestV2,
     EdgeSpec,
     GeometryIntentV2,
     GeometrySpecV2,
@@ -213,6 +214,7 @@ def fit_anchors_to_dataset(
     if store.anchor_count() == 0:
         store.append_anchors(anchors)
     if store.fit_count() == 432 and store.count("anchor_fit") == 432:
+        _refresh_manifest_if_present(store)
         return {
             "anchors": store.anchor_count(),
             "anchor_fits": store.fit_count(),
@@ -264,11 +266,31 @@ def fit_anchors_to_dataset(
         geometry_rows,
         batch_metadata={"kind": "anchor_fit", "completed": completed},
     )
+    _refresh_manifest_if_present(store)
     return {
         "anchors": store.anchor_count(),
         "anchor_fits": store.fit_count(),
         "derived_geometries": store.count("anchor_fit"),
     }
+
+
+def _refresh_manifest_if_present(store) -> None:
+    """拟合分区落盘后刷新正式 manifest 的计数和不可变文件哈希。"""
+
+    manifest_path = store.root / "dataset_manifest.json"
+    if not manifest_path.exists():
+        return
+    manifest = DatasetManifestV2.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    store.write_manifest(
+        manifest.model_copy(
+            update={
+                "anchors": store.anchor_count(),
+                "anchor_fits": store.fit_count(),
+                "files": store.artifact_hashes(),
+                "batch_manifests": store.batch_manifests(),
+            }
+        )
+    )
 
 
 def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2, list[str]]:

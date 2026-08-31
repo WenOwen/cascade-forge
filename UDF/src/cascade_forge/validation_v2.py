@@ -12,12 +12,14 @@ from .models import (
     ValidationReport,
     ValidationStatus,
 )
-from .models_v2 import AirfoilGeometryV2, NURBSCurveSpec
+from .models_v2 import AirfoilGeometryV2, GeometryFeaturesV2, NURBSCurveSpec
 
 
 def validate_profile_v2(
     geometry: AirfoilGeometryV2,
     cascade_context: CascadeContext | None = None,
+    *,
+    features: GeometryFeaturesV2 | None = None,
 ) -> ValidationReport:
     suction, pressure, camber, thickness = geometry.arrays()
     issues: list[ValidationIssue] = []
@@ -61,7 +63,7 @@ def validate_profile_v2(
     if minimum_thickness <= 0.0:
         error("non_positive_thickness", "中央曲面存在非正厚度", minimum_thickness, ">0")
 
-    features = extract_features(geometry)
+    features = features or extract_features(geometry)
     if features.full_outline_self_intersects:
         error("outline_self_intersection", "完整闭合轮廓发生自交")
     if abs(features.signed_area) <= 1e-10:

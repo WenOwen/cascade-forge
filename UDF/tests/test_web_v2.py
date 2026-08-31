@@ -125,9 +125,7 @@ def test_v2_blade_job_and_artifact_download(tmp_path) -> None:
         ],
     )
     with TestClient(create_app(v1_root, v2_dataset_root=v2_root)) as client:
-        preview = client.post(
-            "/api/v2/blades/preview", json=schedule.model_dump(mode="json")
-        )
+        preview = client.post("/api/v2/blades/preview", json=schedule.model_dump(mode="json"))
         assert preview.status_code == 200
         assert len(preview.json()["sections"]) == 2
         response = client.post("/api/v2/blades", json=schedule.model_dump(mode="json"))

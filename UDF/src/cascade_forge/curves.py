@@ -21,8 +21,32 @@ class CurveEvaluator:
         self.spec = spec
         self.control_points = np.asarray(spec.control_points, dtype=float)
         self.dimension = self.control_points.shape[1]
+        self._bspline: BSpline | None = None
+        self._nurbs_numerator: BSpline | None = None
+        self._nurbs_denominator: BSpline | None = None
         if isinstance(spec, (BSplineCurveSpec, NURBSCurveSpec)):
             self.domain = (float(spec.knots[spec.degree]), float(spec.knots[-spec.degree - 1]))
+            if isinstance(spec, BSplineCurveSpec):
+                self._bspline = BSpline(
+                    spec.knots,
+                    self.control_points,
+                    spec.degree,
+                    extrapolate=False,
+                )
+            else:
+                weights = np.asarray(spec.weights, dtype=float)
+                self._nurbs_numerator = BSpline(
+                    spec.knots,
+                    self.control_points * weights[:, None],
+                    spec.degree,
+                    extrapolate=False,
+                )
+                self._nurbs_denominator = BSpline(
+                    spec.knots,
+                    weights,
+                    spec.degree,
+                    extrapolate=False,
+                )
         else:
             self.domain = (0.0, 1.0)
 
@@ -33,13 +57,8 @@ class CurveEvaluator:
         if isinstance(self.spec, BezierCurveSpec):
             return self._bezier(u, derivative)
         if isinstance(self.spec, BSplineCurveSpec):
-            spline = BSpline(
-                self.spec.knots,
-                self.control_points,
-                self.spec.degree,
-                extrapolate=False,
-            )
-            return np.asarray(spline(u, nu=derivative), dtype=float)
+            assert self._bspline is not None
+            return np.asarray(self._bspline(u, nu=derivative), dtype=float)
         return self._nurbs(u, derivative)
 
     def _bezier(self, u: np.ndarray, derivative: int) -> np.ndarray:
@@ -60,23 +79,21 @@ class CurveEvaluator:
 
     def _nurbs(self, u: np.ndarray, derivative: int) -> np.ndarray:
         assert isinstance(self.spec, NURBSCurveSpec)
-        weights = np.asarray(self.spec.weights, dtype=float)
-        weighted = self.control_points * weights[:, None]
-        numerator = BSpline(self.spec.knots, weighted, self.spec.degree, extrapolate=False)
-        denominator = BSpline(self.spec.knots, weights, self.spec.degree, extrapolate=False)
-        a0 = np.asarray(numerator(u), dtype=float)
-        w0 = np.asarray(denominator(u), dtype=float)
+        assert self._nurbs_numerator is not None
+        assert self._nurbs_denominator is not None
+        a0 = np.asarray(self._nurbs_numerator(u), dtype=float)
+        w0 = np.asarray(self._nurbs_denominator(u), dtype=float)
         if derivative == 0:
             return a0 / w0[..., None]
-        a1 = np.asarray(numerator(u, nu=1), dtype=float)
-        w1 = np.asarray(denominator(u, nu=1), dtype=float)
+        a1 = np.asarray(self._nurbs_numerator(u, nu=1), dtype=float)
+        w1 = np.asarray(self._nurbs_denominator(u, nu=1), dtype=float)
         first = a1 / w0[..., None] - a0 * w1[..., None] / w0[..., None] ** 2
         if derivative == 1:
             return first
         if derivative > 2:
             raise ValueError("NURBS 当前支持到二阶解析导数")
-        a2 = np.asarray(numerator(u, nu=2), dtype=float)
-        w2 = np.asarray(denominator(u, nu=2), dtype=float)
+        a2 = np.asarray(self._nurbs_numerator(u, nu=2), dtype=float)
+        w2 = np.asarray(self._nurbs_denominator(u, nu=2), dtype=float)
         return (
             a2 / w0[..., None]
             - a0 * w2[..., None] / w0[..., None] ** 2
