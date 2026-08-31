@@ -157,30 +157,32 @@ def _polyline_self_intersects(points: np.ndarray, *, closed: bool) -> bool:
     starts = points[:-1]
     ends = points[1:]
     segment_count = len(starts)
+    first, second = np.triu_indices(segment_count, k=2)
+    if closed:
+        keep = ~((first == 0) & (second == segment_count - 1))
+        first, second = first[keep], second[keep]
+    a, b = starts[first], ends[first]
+    c, d = starts[second], ends[second]
+    bbox = (
+        (np.maximum(a[:, 0], b[:, 0]) >= np.minimum(c[:, 0], d[:, 0]) - 1e-13)
+        & (np.maximum(c[:, 0], d[:, 0]) >= np.minimum(a[:, 0], b[:, 0]) - 1e-13)
+        & (np.maximum(a[:, 1], b[:, 1]) >= np.minimum(c[:, 1], d[:, 1]) - 1e-13)
+        & (np.maximum(c[:, 1], d[:, 1]) >= np.minimum(a[:, 1], b[:, 1]) - 1e-13)
+    )
+    if not np.any(bbox):
+        return False
+    a, b, c, d = a[bbox], b[bbox], c[bbox], d[bbox]
 
-    def orientation(a, b, c) -> float:
-        return float(np.cross(b - a, c - a))
+    def orientation(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> np.ndarray:
+        pq = q - p
+        pr = r - p
+        return pq[:, 0] * pr[:, 1] - pq[:, 1] * pr[:, 0]
 
-    for first in range(segment_count):
-        for second in range(first + 2, segment_count):
-            if closed and first == 0 and second == segment_count - 1:
-                continue
-            a, b = starts[first], ends[first]
-            c, d = starts[second], ends[second]
-            if (
-                max(a[0], b[0]) < min(c[0], d[0]) - 1e-13
-                or max(c[0], d[0]) < min(a[0], b[0]) - 1e-13
-                or max(a[1], b[1]) < min(c[1], d[1]) - 1e-13
-                or max(c[1], d[1]) < min(a[1], b[1]) - 1e-13
-            ):
-                continue
-            o1 = orientation(a, b, c)
-            o2 = orientation(a, b, d)
-            o3 = orientation(c, d, a)
-            o4 = orientation(c, d, b)
-            if o1 * o2 < -1e-24 and o3 * o4 < -1e-24:
-                return True
-    return False
+    o1 = orientation(a, b, c)
+    o2 = orientation(a, b, d)
+    o3 = orientation(c, d, a)
+    o4 = orientation(c, d, b)
+    return bool(np.any((o1 * o2 < -1e-24) & (o3 * o4 < -1e-24)))
 
 
 def _trailing_edge_half_wedge(suction: np.ndarray, pressure: np.ndarray) -> float:

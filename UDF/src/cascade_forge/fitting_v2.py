@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -194,6 +195,80 @@ def fit_legacy_anchors(
     if len(records) != 432:
         raise AssertionError(f"锚点派生拟合应为 432，实际为 {len(records)}")
     return records, geometries
+
+
+def fit_anchors_to_dataset(
+    raw_root: str | Path,
+    dataset_root: str | Path,
+    *,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """把 48 个只读锚点和 432 个派生拟合写入独立 v2 分区。"""
+
+    from .storage_v2 import DatasetStoreV2
+    from .validation import validate_profile
+
+    store = DatasetStoreV2(dataset_root)
+    anchors = load_legacy_anchor_geometries(raw_root)
+    if store.anchor_count() == 0:
+        store.append_anchors(anchors)
+    if store.fit_count() == 432 and store.count("anchor_fit") == 432:
+        return {
+            "anchors": store.anchor_count(),
+            "anchor_fits": store.fit_count(),
+            "derived_geometries": store.count("anchor_fit"),
+        }
+    existing_fit_ids = store.fit_ids()
+    existing_geometry_ids = store.geometry_ids()
+    fit_records: list[AnchorFitRecord] = []
+    geometry_rows = []
+    completed = 0
+    for anchor in anchors:
+        for camber_family in CurveFamily:
+            for thickness_family in CurveFamily:
+                record, geometry = fit_anchor_geometry(anchor, camber_family, thickness_family)
+                report = validate_profile(geometry)
+                if record.fit_id not in existing_fit_ids:
+                    fit_records.append(record)
+                    existing_fit_ids.add(record.fit_id)
+                if geometry.geometry_id not in existing_geometry_ids:
+                    geometry_rows.append(
+                        (
+                            geometry,
+                            extract_features(geometry),
+                            report,
+                            {
+                                "intent_group_index": None,
+                                "proposal_index": None,
+                                "is_extra": False,
+                            },
+                        )
+                    )
+                    existing_geometry_ids.add(geometry.geometry_id)
+                completed += 1
+                if len(fit_records) >= 48 or len(geometry_rows) >= 48:
+                    store.append_anchor_fits(fit_records)
+                    store.append_geometries(
+                        geometry_rows,
+                        batch_metadata={
+                            "kind": "anchor_fit",
+                            "completed": completed,
+                        },
+                    )
+                    fit_records.clear()
+                    geometry_rows.clear()
+                if progress and completed % 9 == 0:
+                    progress({"completed": completed, "total": 432})
+    store.append_anchor_fits(fit_records)
+    store.append_geometries(
+        geometry_rows,
+        batch_metadata={"kind": "anchor_fit", "completed": completed},
+    )
+    return {
+        "anchors": store.anchor_count(),
+        "anchor_fits": store.fit_count(),
+        "derived_geometries": store.count("anchor_fit"),
+    }
 
 
 def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2, list[str]]:

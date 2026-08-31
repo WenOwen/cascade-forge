@@ -79,7 +79,7 @@ def resolve_geometry_spec(spec: GeometrySpecV2) -> GeometrySpecV2:
     thickness_error = math.inf
     predicted_tmax = math.nan
     predicted_xt = math.nan
-    for _ in range(6):
+    for _ in range(5):
         half_uniform = _reference_half_thickness(
             spec,
             max_thickness_x_ratio=design_xt,
@@ -138,7 +138,7 @@ def generate_profile_v2(spec: GeometrySpecV2) -> AirfoilGeometryV2:
 
     leading_radius = resolved.edge.leading_edge_radius_ratio
     trailing_radius = resolved.edge.trailing_edge_radius_ratio
-    for _ in range(12):
+    for _ in range(6):
         leading = _solve_edge_circle(
             camber_eval,
             suction_thickness_eval,
@@ -368,7 +368,7 @@ def _predict_basic_contract(
     thickness = CurveEvaluator(thickness_curve)
     leading_radius = edge.leading_edge_radius_ratio
     trailing_radius = edge.trailing_edge_radius_ratio
-    for _ in range(8):
+    for _ in range(4):
         leading = _solve_edge_circle(camber, thickness, thickness, leading_radius, leading=True)
         trailing = _solve_edge_circle(camber, thickness, thickness, trailing_radius, leading=False)
         le_nose = leading.arc[leading.nose_index]

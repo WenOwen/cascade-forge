@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
@@ -256,6 +257,28 @@ class AnchorFitRecord(BaseModel):
     fit_status: Literal["valid", "warning", "rejected"]
     source_warnings: list[str] = Field(default_factory=list)
     explicit_spec: dict[str, Any]
+
+
+class DatasetManifestV2(BaseModel):
+    dataset_name: str = "geometry-v2.0.0"
+    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    generator_version: str = GENERATOR_VERSION_V2
+    seed: int = 20260831
+    target_valid: int
+    generated_valid: int
+    complete_intent_groups: int
+    extra_records: int
+    anchors: int = 48
+    anchor_fits: int = 432
+    proposals: int
+    rejected_proposals: int
+    acceptance_rate: float
+    config_sha256: str
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    files: dict[str, str] = Field(default_factory=dict)
+    batch_manifests: list[str] = Field(default_factory=list)
+    rejection_distribution: dict[str, int] = Field(default_factory=dict)
+    provenance: dict[str, str] = Field(default_factory=dict)
 
 
 def _check_control_points(points: list[list[float]]) -> None:

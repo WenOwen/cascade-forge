@@ -15,8 +15,18 @@ def audit_dataset(dataset: str | Path, *, rebuild_sample: int = 128) -> dict[str
     """对数据规模、不可变制品和生成可复现性执行交付级审计。"""
 
     root = Path(dataset).resolve()
-    store = DatasetStore(root)
     manifest_path = root / "dataset_manifest.json"
+    if manifest_path.exists():
+        import json
+
+        if (
+            str(json.loads(manifest_path.read_text(encoding="utf-8")).get("schema_version"))
+            == "2.0.0"
+        ):
+            from .audit_v2 import audit_dataset_v2
+
+            return audit_dataset_v2(root, rebuild_sample=rebuild_sample)
+    store = DatasetStore(root)
     manifest = (
         DatasetManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
         if manifest_path.exists()

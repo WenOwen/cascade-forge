@@ -62,6 +62,15 @@ def generate_dataset(
 ) -> DatasetManifest:
     config_path = Path(config_path).resolve()
     config = load_dataset_config(config_path)
+    if str(config.get("schema_version")) == "2.0.0":
+        from .sampling_v2 import generate_dataset_v2
+
+        return generate_dataset_v2(
+            config_path,
+            output_root,
+            target_valid=target_valid,
+            progress=progress,
+        )
     target = int(target_valid or config["target_valid"])
     store = DatasetStore(output_root)
     existing_ids = store.geometry_ids()
