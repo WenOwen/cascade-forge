@@ -1,5 +1,7 @@
 # Cascade Forge 叶型几何数据库 v1
 
+> v1 数据、ID 与 API 保持冻结兼容。v2 开发合同见本文末尾“Cascade Forge v2”，界面统一遵循 [design-system.md](design-system.md)。
+
 ## 1. 开发目标与边界
 
 Cascade Forge 是面向轴流压气机和涵道风扇的可追溯叶型几何数据库工具。v1 将几何真值、叶栅上下文和未来气动工况严格分层：
@@ -131,3 +133,44 @@ uv run cascade-forge serve --dataset datasets/geometry-v1.0.0
 - 当前叶栅喉道是几何代理检查，不替代周期性网格或流动求解。
 - AVDR 将采用独立修正库，不进入二维 `Geometry_ID`；更窄或更宽的参数域应创建新的版本化 YAML 和数据集，不覆盖 v1。
 - GeomTurbo 输出为本项目支持的 SECTIONAL 3.7 子集；跨软件导入仍应在目标工具中做一次独立验收。
+
+## 12. Cascade Forge v2 开发合同
+
+### 目标与兼容边界
+
+v2 新增 Bezier、B-spline 与 NURBS 可组合中弧线/厚度内核，厚度沿中弧线法向叠加，并以真实圆弧闭合前尾缘。现有 `GeometrySpec`、`geometry-v1.0.0`、`/api/v1` 和全部 v1 ID 不迁移、不重写。v2 使用 schema `2.0.0`、独立配置、独立 ID 和 `/api/v2`。
+
+AutoBlade 仅作为几何语义参考：Simple Bezier 中弧线、双侧 B-spline 厚度、`ADDITION_TYPE NORMAL`、圆边和楔角。v2 不读写 `.par/.abp`，也不调用商业软件。
+
+### 数学合同
+
+每条曲线必须提供位置及一、二阶解析导数。中弧线 `C(u)` 的吸力侧单位法向为：
+
+$$\mathbf n(u)=\frac{(-C_y'(u),C_x'(u))}{\|\mathbf C'(u)\|}$$
+
+中央吸力面和压力面由双侧标量半厚度给出：
+
+$$\mathbf S(u)=\mathbf C(u)+t_s(u)\mathbf n(u)$$
+
+$$\mathbf P(u)=\mathbf C(u)-t_p(u)\mathbf n(u)$$
+
+Bezier 中弧线使用 4 个控制点；B-spline/NURBS 中弧线基础模式使用 6 个三次开放夹持控制点。Bezier 厚度使用 7 个控制值；B-spline/NURBS 厚度使用 7 个三次开放夹持控制值。NURBS 权重必须严格为正。
+
+基础模式的工程参数不能冒充唯一曲线定义。解析器以固定初值和边界约束求解显式控制点、节点和权重，并把解析残差写入 spec；高级模式直接接收完整显式曲线。Geometry ID 只根据解析后的显式定义、边缘合同、生成器版本和坐标约定计算。
+
+前缘和尾缘分别求解给定半径的圆与两侧中央曲线的 G1 接触点，裁剪中央曲线后插入真实圆弧。最终每侧从前缘鼻点到尾缘鼻点重采样 201 点，并额外保存完整边缘圆弧用于审计和 Web 放大视图。
+
+### 数据与产品合同
+
+- v2 正式库恰好交付 20,000 个有效生成叶型：2,222 个完整九组合 intent 组产生 19,998 个记录，另固定补充 `Bezier×B-spline` 与 `NURBS×NURBS`。
+- 48 个 NASA 原始锚点保持不变；每个锚点产生九种派生拟合，共 432 条，并保存 RMS、最大点距、Hausdorff 近似和拟合状态。
+- 正式数据集只读；手工预览和控制点编辑保存到独立 workspace。
+- Web UI 覆盖全部公共 Python API 和 CLI 工作流，采用多页面本地工作台；不把内部私有函数暴露为产品功能。
+
+### v2 验收门槛
+
+- 中央法向偏置误差不超过 `1e-10c`，轮廓闭合不超过 `1e-10c`。
+- LE/TE 半径误差不超过 `1e-8c`，圆弧 G1 相切误差不超过 `0.05°`。
+- 金属角误差不超过 `0.05°`，最大厚度误差不超过 `5e-4c`，位置误差不超过 `0.005c`。
+- 九种曲线组合均无负厚度、自交和非法节点/权重；同配置重复运行得到相同 intent、ID、坐标、配额和 manifest。
+- Web 在 320、375、768、1024、1440px 无页面横向溢出，Plotly modebar 始终位于画布容器内。
