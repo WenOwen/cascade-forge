@@ -3,15 +3,26 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Protocol
 
-from .storage import DatasetStore
+
+class JobStore(Protocol):
+    def create_job(self, job_type: str, payload: dict[str, Any]) -> str: ...
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None: ...
 
 
 class JobManager:
     """单写者本地任务队列，状态持久化到数据集 DuckDB。"""
 
-    def __init__(self, store: DatasetStore):
+    def __init__(self, store: JobStore):
         self.store = store
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cascade-forge")
         self._write_lock = threading.Lock()

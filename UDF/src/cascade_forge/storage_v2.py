@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +57,20 @@ class DatasetStoreV2:
                     schema_version VARCHAR NOT NULL,
                     applied_at TIMESTAMP NOT NULL,
                     note VARCHAR
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jobs_v2 (
+                    job_id VARCHAR PRIMARY KEY,
+                    job_type VARCHAR,
+                    status VARCHAR,
+                    payload_json VARCHAR,
+                    result_json VARCHAR,
+                    error VARCHAR,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP
                 )
                 """
             )
@@ -381,6 +396,64 @@ class DatasetStoreV2:
             path.relative_to(self.root).as_posix()
             for path in sorted(self.batch_dir.glob("batch-*.json"))
         ]
+
+    def create_job(self, job_type: str, payload: dict[str, Any]) -> str:
+        job_id = "job_v2_" + uuid.uuid4().hex
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            connection.execute(
+                """
+                INSERT INTO jobs_v2 VALUES (?, ?, 'queued', ?, NULL, NULL,
+                                            current_timestamp, current_timestamp)
+                """,
+                [job_id, job_type, json.dumps(payload, ensure_ascii=False)],
+            )
+        return job_id
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            connection.execute(
+                """
+                UPDATE jobs_v2 SET status = ?, result_json = ?, error = ?,
+                                   updated_at = current_timestamp
+                WHERE job_id = ?
+                """,
+                [
+                    status,
+                    json.dumps(result, ensure_ascii=False) if result is not None else None,
+                    error,
+                    job_id,
+                ],
+            )
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            result = connection.execute("SELECT * FROM jobs_v2 WHERE job_id = ?", [job_id])
+            row = result.fetchone()
+            if row is None:
+                return None
+            record = dict(zip([column[0] for column in result.description], row, strict=True))
+        for key in ("payload_json", "result_json"):
+            if record[key]:
+                record[key.removesuffix("_json")] = json.loads(record[key])
+            record.pop(key)
+        record["created_at"] = str(record["created_at"])
+        record["updated_at"] = str(record["updated_at"])
+        return record
+
+    def list_jobs(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            ids = connection.execute(
+                "SELECT job_id FROM jobs_v2 ORDER BY created_at DESC LIMIT ?",
+                [max(1, min(limit, 1000))],
+            ).fetchall()
+        return [self.get_job(row[0]) for row in ids]
 
     @staticmethod
     def _next_index(directory: Path) -> int:

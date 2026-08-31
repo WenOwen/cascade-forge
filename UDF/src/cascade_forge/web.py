@@ -1,28 +1,39 @@
 from __future__ import annotations
 
+import csv
+import io
 from pathlib import Path
 from typing import Any
 
 import plotly.graph_objects as go
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from plotly.offline import get_plotlyjs
 from pydantic import BaseModel, Field
 
+from .audit_v2 import audit_dataset_v2
 from .blade3d import build_blade
 from .features import extract_features
+from .fitting_v2 import fit_anchors_to_dataset
 from .geometry2d import generate_profile
+from .geometry_v2 import resolve_geometry_spec
 from .geomturbo import export_geomturbo
 from .jobs import JobManager
-from .models import GeometrySpec, SectionSchedule
+from .models import CascadeContext, GeometrySpec, SectionSchedule
+from .models_v2 import GeometrySpecV2
 from .sampling import generate_dataset
+from .sampling_v2 import generate_dataset_v2
 from .storage import DatasetStore
+from .storage_v2 import DatasetStoreV2
 from .validation import validate_profile
+from .workspace import WorkspaceStore
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PACKAGE_ROOT / "configs" / "geometry-v1.0.0.yaml"
+DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.0.0.yaml"
+DEFAULT_ANCHORS = PACKAGE_ROOT / "data" / "raw" / "nasa120859"
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 
@@ -32,14 +43,72 @@ class BatchRequest(BaseModel):
     config_path: str | None = None
 
 
-def create_app(dataset_root: str | Path) -> FastAPI:
+class BatchRequestV2(BatchRequest):
+    workers: int = Field(default=1, ge=1, le=64)
+
+
+class WorkspaceDesignRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    tags: list[str] = Field(default_factory=list)
+    spec: GeometrySpecV2
+
+
+class CompareRequestV2(BaseModel):
+    geometry_ids: list[str] = Field(min_length=2, max_length=12)
+
+
+class CascadeRequestV2(BaseModel):
+    geometry_id: str
+    solidity: float = Field(ge=0.7, le=2.2)
+
+
+class AnchorFitRequestV2(BaseModel):
+    raw_root: str | None = None
+
+
+def create_app(
+    dataset_root: str | Path,
+    *,
+    v2_dataset_root: str | Path | None = None,
+    workspace_root: str | Path | None = None,
+) -> FastAPI:
     dataset_root = Path(dataset_root).resolve()
-    store = DatasetStore(dataset_root)
+    manifest_path = dataset_root / "dataset_manifest.json"
+    is_v2_root = False
+    if manifest_path.exists():
+        import json
+
+        is_v2_root = (
+            str(json.loads(manifest_path.read_text(encoding="utf-8")).get("schema_version"))
+            == "2.0.0"
+        )
+    if is_v2_root:
+        v1_root = dataset_root.parent / "geometry-v1.0.0"
+        resolved_v2_root = dataset_root
+    else:
+        v1_root = dataset_root
+        resolved_v2_root = (
+            Path(v2_dataset_root).resolve()
+            if v2_dataset_root
+            else dataset_root.parent / "geometry-v2.0.0"
+        )
+    store = DatasetStore(v1_root)
+    store_v2 = DatasetStoreV2(resolved_v2_root)
+    workspace = WorkspaceStore(
+        Path(workspace_root).resolve()
+        if workspace_root
+        else resolved_v2_root.parent / "workspace-v2"
+    )
     jobs = JobManager(store)
+    jobs_v2 = JobManager(store_v2)
     templates = Jinja2Templates(directory=str(TEMPLATE_ROOT))
-    application = FastAPI(title="Cascade Forge", version="1.0.0")
+    application = FastAPI(title="Cascade Forge", version="2.0.0")
     application.state.store = store
     application.state.jobs = jobs
+    application.state.store_v2 = store_v2
+    application.state.workspace = workspace
+    application.state.jobs_v2 = jobs_v2
+    application.state.v2_dataset_root = resolved_v2_root
     application.state.dataset_root = dataset_root
     application.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
 
@@ -107,6 +176,270 @@ def create_app(dataset_root: str | Path) -> FastAPI:
 
         job_id = jobs.submit("generate_dataset", body.model_dump(mode="json"), run)
         return {"job_id": job_id, "status": "queued"}
+
+    @application.post("/api/v2/preview")
+    def preview_v2(spec: GeometrySpecV2) -> dict[str, Any]:
+        try:
+            geometry = generate_profile(spec)
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return _geometry_payload(geometry)
+
+    @application.post("/api/v2/curves/resolve")
+    def resolve_curves_v2(spec: GeometrySpecV2) -> dict[str, Any]:
+        try:
+            resolved = resolve_geometry_spec(spec)
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "intent_id": resolved.intent.intent_id,
+            "geometry_id": resolved.geometry_id,
+            "spec": resolved.model_dump(mode="json"),
+            "residuals": resolved.resolution_residuals,
+        }
+
+    @application.get("/api/v2/geometries")
+    def list_geometries_v2(
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0),
+        camber_family: str | None = None,
+        thickness_family: str | None = None,
+        status: str | None = None,
+        origin: str | None = None,
+        sort: str = "geometry_id",
+        descending: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            items = store_v2.list_geometries(
+                limit=limit,
+                offset=offset,
+                camber_family=camber_family,
+                thickness_family=thickness_family,
+                status=status,
+                origin=origin,
+                sort=sort,
+                descending=descending,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "items": items,
+            "limit": limit,
+            "offset": offset,
+            "total": store_v2.count(),
+        }
+
+    @application.get("/api/v2/geometries/{geometry_id}")
+    def get_geometry_v2(geometry_id: str) -> dict[str, Any]:
+        geometry = store_v2.get_geometry(geometry_id)
+        if geometry is None:
+            raise HTTPException(404, f"找不到 {geometry_id}")
+        return _geometry_payload(geometry)
+
+    @application.get("/api/v2/geometries/{geometry_id}/export")
+    def export_geometry_v2(geometry_id: str, format: str = "csv") -> Response:
+        geometry = store_v2.get_geometry(geometry_id)
+        if geometry is None:
+            raise HTTPException(404, f"找不到 {geometry_id}")
+        if format == "json":
+            return JSONResponse(
+                geometry.model_dump(mode="json"),
+                headers={"Content-Disposition": f'attachment; filename="{geometry_id}.json"'},
+            )
+        if format != "csv":
+            raise HTTPException(422, "format 仅支持 csv 或 json")
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["side", "point", "x_over_c", "y_over_c"])
+        suction, pressure, _, _ = geometry.arrays()
+        for side, coordinates in (("suction", suction), ("pressure", pressure)):
+            for index, coordinate in enumerate(coordinates):
+                writer.writerow([side, index, *coordinate])
+        return Response(
+            stream.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{geometry_id}.csv"'},
+        )
+
+    @application.get("/api/v2/dataset/manifest")
+    def get_manifest_v2() -> FileResponse:
+        path = resolved_v2_root / "dataset_manifest.json"
+        if not path.is_file():
+            raise HTTPException(404, "v2 manifest 尚未生成")
+        return FileResponse(path, filename=path.name)
+
+    @application.post("/api/v2/compare")
+    def compare_v2(body: CompareRequestV2) -> dict[str, Any]:
+        geometries = []
+        for geometry_id in body.geometry_ids:
+            geometry = store_v2.get_geometry(geometry_id)
+            if geometry is None:
+                raise HTTPException(404, f"找不到 {geometry_id}")
+            geometries.append(geometry)
+        features = [extract_features(item) for item in geometries]
+        baseline = features[0]
+        return {
+            "items": [item.model_dump(mode="json") for item in geometries],
+            "features": [item.model_dump(mode="json") for item in features],
+            "deltas_from_first": [
+                {
+                    "geometry_id": item.geometry_id,
+                    "max_thickness_ratio": item.max_thickness_ratio - baseline.max_thickness_ratio,
+                    "max_thickness_x_ratio": item.max_thickness_x_ratio
+                    - baseline.max_thickness_x_ratio,
+                    "max_camber_ratio": item.max_camber_ratio - baseline.max_camber_ratio,
+                }
+                for item in features[1:]
+            ],
+        }
+
+    @application.post("/api/v2/cascade")
+    def cascade_v2(body: CascadeRequestV2) -> dict[str, Any]:
+        geometry = store_v2.get_geometry(body.geometry_id)
+        if geometry is None:
+            raise HTTPException(404, f"找不到 {body.geometry_id}")
+        report = validate_profile(geometry, CascadeContext(solidity=body.solidity))
+        suction, pressure, _, _ = geometry.arrays()
+        pitch = 1.0 / body.solidity
+        return {
+            "geometry_id": body.geometry_id,
+            "solidity": body.solidity,
+            "pitch_ratio": pitch,
+            "validation": report.model_dump(mode="json"),
+            "passages": [
+                {
+                    "offset": offset,
+                    "suction": (suction + [0.0, offset * pitch]).tolist(),
+                    "pressure": (pressure + [0.0, offset * pitch]).tolist(),
+                }
+                for offset in (-1, 0, 1)
+            ],
+        }
+
+    @application.post("/api/v2/workspace/designs", status_code=201)
+    def save_workspace_design(body: WorkspaceDesignRequest) -> dict[str, Any]:
+        geometry = generate_profile(body.spec)
+        design_id = workspace.save_design(body.name, geometry, tags=body.tags)
+        return {"design_id": design_id, "geometry_id": geometry.geometry_id}
+
+    @application.get("/api/v2/workspace/designs")
+    def list_workspace_designs(
+        limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0)
+    ) -> dict[str, Any]:
+        return {
+            "items": workspace.list_designs(limit=limit, offset=offset),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    @application.get("/api/v2/workspace/designs/{design_id}")
+    def get_workspace_design(design_id: str) -> dict[str, Any]:
+        record = workspace.get_design(design_id)
+        if record is None:
+            raise HTTPException(404, f"找不到 {design_id}")
+        return {
+            **record,
+            "spec": record["spec"].model_dump(mode="json"),
+            "geometry": record["geometry"].model_dump(mode="json"),
+        }
+
+    @application.post("/api/v2/workspace/import", status_code=201)
+    def import_workspace_design(payload: dict[str, Any]) -> dict[str, str]:
+        geometry = payload.get("geometry")
+        if geometry is None:
+            raise HTTPException(422, "缺少 geometry")
+        from .models_v2 import AirfoilGeometryV2
+
+        parsed = AirfoilGeometryV2.model_validate(geometry)
+        design_id = workspace.save_design(
+            str(payload.get("name", "导入设计")),
+            parsed,
+            tags=list(payload.get("tags", [])),
+        )
+        return {"design_id": design_id}
+
+    @application.get("/api/v2/workspace/designs/{design_id}/export")
+    def export_workspace_design(design_id: str) -> JSONResponse:
+        record = workspace.get_design(design_id)
+        if record is None:
+            raise HTTPException(404, f"找不到 {design_id}")
+        return JSONResponse(
+            {
+                "workspace_schema": "1.0.0",
+                "name": record["name"],
+                "revision": record["revision"],
+                "tags": record["tags"],
+                "spec": record["spec"].model_dump(mode="json"),
+                "geometry": record["geometry"].model_dump(mode="json"),
+            },
+            headers={"Content-Disposition": f'attachment; filename="{design_id}.json"'},
+        )
+
+    @application.post("/api/v2/batches", status_code=202)
+    def start_batch_v2(body: BatchRequestV2) -> dict[str, str]:
+        config_path = Path(body.config_path).resolve() if body.config_path else DEFAULT_CONFIG_V2
+
+        def run() -> dict[str, Any]:
+            return generate_dataset_v2(
+                config_path,
+                resolved_v2_root,
+                target_valid=body.target_valid,
+                workers=body.workers,
+            ).model_dump(mode="json")
+
+        job_id = jobs_v2.submit("generate_dataset_v2", body.model_dump(mode="json"), run)
+        return {"job_id": job_id, "status": "queued"}
+
+    @application.post("/api/v2/anchor-fits", status_code=202)
+    def start_anchor_fits_v2(body: AnchorFitRequestV2) -> dict[str, str]:
+        raw_root = Path(body.raw_root).resolve() if body.raw_root else DEFAULT_ANCHORS
+
+        def run() -> dict[str, Any]:
+            return fit_anchors_to_dataset(raw_root, resolved_v2_root)
+
+        job_id = jobs_v2.submit("fit_anchors_v2", body.model_dump(mode="json"), run)
+        return {"job_id": job_id, "status": "queued"}
+
+    @application.get("/api/v2/audit")
+    def audit_v2(rebuild_sample: int = Query(8, ge=0, le=256)) -> dict[str, Any]:
+        return audit_dataset_v2(
+            resolved_v2_root,
+            rebuild_sample=rebuild_sample,
+            require_anchors=False,
+        )
+
+    @application.get("/api/v2/jobs")
+    def list_jobs_v2(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
+        return {"items": store_v2.list_jobs(limit=limit)}
+
+    @application.get("/api/v2/jobs/{job_id}")
+    def get_job_v2(job_id: str) -> dict[str, Any]:
+        job = store_v2.get_job(job_id)
+        if job is None:
+            raise HTTPException(404, f"找不到 {job_id}")
+        return job
+
+    @application.post("/api/v2/blades", status_code=202)
+    def start_blade_v2(schedule: SectionSchedule) -> dict[str, str]:
+        def run() -> dict[str, Any]:
+            blade = build_blade(schedule, store_v2.get_geometry)
+            output = resolved_v2_root / "artifacts" / blade.blade_id / f"{schedule.name}.geomTurbo"
+            path = export_geomturbo(blade, output)
+            return {
+                "blade_id": blade.blade_id,
+                "artifact": path.relative_to(resolved_v2_root / "artifacts").as_posix(),
+            }
+
+        job_id = jobs_v2.submit("build_blade_v2", schedule.model_dump(mode="json"), run)
+        return {"job_id": job_id, "status": "queued"}
+
+    @application.get("/api/v2/artifacts/{artifact_path:path}")
+    def download_artifact_v2(artifact_path: str) -> FileResponse:
+        root = (resolved_v2_root / "artifacts").resolve()
+        path = (root / artifact_path).resolve()
+        if root not in path.parents or not path.is_file():
+            raise HTTPException(404, "制品不存在")
+        return FileResponse(path, filename=path.name)
 
     @application.get("/api/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
@@ -216,7 +549,14 @@ def create_app(dataset_root: str | Path) -> FastAPI:
 
     @application.get("/health")
     def health() -> JSONResponse:
-        return JSONResponse({"status": "ok", "schema_version": "1.0.0"})
+        return JSONResponse(
+            {
+                "status": "ok",
+                "schema_version": "2.0.0",
+                "v1": {"total": store.count()},
+                "v2": {"total": store_v2.count()},
+            }
+        )
 
     return application
 
@@ -235,6 +575,14 @@ def _default_spec() -> GeometrySpec:
         fore_shape_factor=1,
         aft_shape_factor=1,
     )
+
+
+def _geometry_payload(geometry) -> dict[str, Any]:
+    return {
+        "geometry": geometry.model_dump(mode="json"),
+        "features": extract_features(geometry).model_dump(mode="json"),
+        "validation": validate_profile(geometry).model_dump(mode="json"),
+    }
 
 
 def _profile_figure(geometry) -> go.Figure:

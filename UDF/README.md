@@ -197,3 +197,11 @@ Bezier 中弧线使用 4 个控制点；B-spline/NURBS 中弧线基础模式使�
 - 恢复点只在 Parquet 与批次 manifest 落盘后原子推进；相同配置重复执行不会追加重复 Geometry ID。
 - `audit_dataset()` 和 `generate_dataset()` 已按 manifest/config schema 自动分派 v1/v2；34 项 pytest 与 Ruff 全部通过。
 - 将边缘半径固定点迭代与轮廓自交检查向量化后，默认九组合基准由约 17.4 秒降至约 7.0 秒；正式 20k 仍采用多进程、分批落盘和中断恢复。
+
+### v2 API、CLI 与任务记录（2026-08-31）
+
+- `/api/v2` 已提供：预览、基础 spec 解析、正式库筛选/详情/CSV/JSON 导出、比较、叶栅、workspace 保存/查询/导入/导出、数据集批次、NASA 拟合、审计、三维叶片、Jobs 和制品下载。
+- v2 后台任务使用进程内单写者队列，状态持久化到独立 `jobs_v2` 表；不引入 Celery 或外部服务。
+- CLI 保持 v1 默认行为；`generate --dataset-version 2.0.0` 选择 v2，新增 `fit-anchors`、`workspace-list`、`workspace-import` 和 `workspace-export`。
+- `export`、`build-blade`、`audit` 和 `serve` 根据 manifest/schema 自动选择 v1/v2 数据源。
+- Ruff 与 38 项 pytest 全部通过；新增 API 测试覆盖 v2 预览、解析、检索、比较、叶栅、workspace、三维任务和 GeomTurbo 制品下载，同时原 `/api/v1` 回归保持通过。
