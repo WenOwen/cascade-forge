@@ -217,6 +217,47 @@ class AirfoilGeometryV2(BaseModel):
         )
 
 
+class GeometryFeaturesV2(BaseModel):
+    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    geometry_id: str
+    intent_id: str
+    camber_family: CurveFamily
+    thickness_family: CurveFamily
+    inlet_metal_angle_deg: float
+    outlet_metal_angle_deg: float
+    turning_angle_deg: float
+    stagger_deg: float
+    max_thickness_ratio: float
+    max_thickness_x_ratio: float
+    max_camber_ratio: float
+    max_camber_x_ratio: float
+    leading_edge_radius_ratio: float
+    trailing_edge_radius_ratio: float
+    trailing_edge_half_wedge_deg: float
+    suction_max_abs_curvature: float
+    pressure_max_abs_curvature: float
+    max_abs_curvature_gradient: float
+    leading_edge_max_abs_curvature: float
+    trailing_edge_max_abs_curvature: float
+    signed_area: float
+    full_outline_self_intersects: bool
+
+
+class AnchorFitRecord(BaseModel):
+    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    fit_id: str
+    source_anchor_id: str
+    geometry_id: str | None = None
+    camber_family: CurveFamily
+    thickness_family: CurveFamily
+    rms_distance_ratio: float
+    max_distance_ratio: float
+    hausdorff_approx_ratio: float
+    fit_status: Literal["valid", "warning", "rejected"]
+    source_warnings: list[str] = Field(default_factory=list)
+    explicit_spec: dict[str, Any]
+
+
 def _check_control_points(points: list[list[float]]) -> None:
     if len(points) < 2:
         raise ValueError("曲线至少需要两个控制点")

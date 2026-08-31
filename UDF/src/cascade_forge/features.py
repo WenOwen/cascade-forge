@@ -5,6 +5,7 @@ import math
 import numpy as np
 
 from .models import AirfoilGeometry, GeometryFeatures
+from .models_v2 import AirfoilGeometryV2, GeometryFeaturesV2
 
 
 def curve_curvature(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -35,7 +36,15 @@ def _signed_area(suction: np.ndarray, pressure: np.ndarray) -> float:
     return 0.5 * float(np.sum(x * np.roll(y, -1) - y * np.roll(x, -1)))
 
 
-def extract_features(geometry: AirfoilGeometry) -> GeometryFeatures:
+def extract_features(
+    geometry: AirfoilGeometry | AirfoilGeometryV2,
+) -> GeometryFeatures | GeometryFeaturesV2:
+    if getattr(geometry, "schema_version", None) == "2.0.0":
+        return _extract_features_v2(geometry)
+    return _extract_features_v1(geometry)
+
+
+def _extract_features_v1(geometry: AirfoilGeometry) -> GeometryFeatures:
     suction, pressure, camber, thickness = geometry.arrays()
     x = camber[:, 0]
     max_index = int(np.argmax(thickness))
@@ -88,6 +97,90 @@ def extract_features(geometry: AirfoilGeometry) -> GeometryFeatures:
         ),
         signed_area=_signed_area(suction, pressure),
     )
+
+
+def _extract_features_v2(geometry: AirfoilGeometryV2) -> GeometryFeaturesV2:
+    suction, pressure, camber, thickness = geometry.arrays()
+    max_index = int(np.argmax(thickness))
+    camber_abs = np.abs(camber[:, 1])
+    camber_index = int(np.argmax(camber_abs))
+    suction_curvature, suction_s = curve_curvature(suction)
+    pressure_curvature, pressure_s = curve_curvature(pressure)
+    suction_gradient = np.gradient(suction_curvature, suction_s, edge_order=2)
+    pressure_gradient = np.gradient(pressure_curvature, pressure_s, edge_order=2)
+    margin = max(6, int(0.05 * len(suction)))
+
+    def interior_max(values: np.ndarray) -> float:
+        return float(np.max(np.abs(values[margin:-margin])))
+
+    handedness_sign = 1.0 if geometry.spec.intent.handedness.value == "right" else -1.0
+    inlet = handedness_sign * geometry.spec.intent.inlet_metal_angle_deg
+    outlet = handedness_sign * geometry.spec.intent.outlet_metal_angle_deg
+    leading_arc = np.asarray(geometry.leading_edge_arc, dtype=float)
+    trailing_arc = np.asarray(geometry.trailing_edge_arc, dtype=float)
+    leading_curvature, _ = curve_curvature(leading_arc)
+    trailing_curvature, _ = curve_curvature(trailing_arc)
+    outline = np.vstack([suction, pressure[-2:0:-1]])
+    return GeometryFeaturesV2(
+        geometry_id=geometry.geometry_id,
+        intent_id=geometry.intent_id,
+        camber_family=geometry.spec.camber_family,
+        thickness_family=geometry.spec.thickness_family,
+        inlet_metal_angle_deg=inlet,
+        outlet_metal_angle_deg=outlet,
+        turning_angle_deg=inlet - outlet,
+        stagger_deg=geometry.realized_stagger_deg,
+        max_thickness_ratio=float(thickness[max_index]),
+        max_thickness_x_ratio=float(camber[max_index, 0]),
+        max_camber_ratio=float(camber_abs[camber_index]),
+        max_camber_x_ratio=float(camber[camber_index, 0]),
+        leading_edge_radius_ratio=geometry.edge_metrics["leading_edge_radius_ratio"],
+        trailing_edge_radius_ratio=geometry.edge_metrics["trailing_edge_radius_ratio"],
+        trailing_edge_half_wedge_deg=geometry.spec.edge.trailing_edge_half_wedge_deg,
+        suction_max_abs_curvature=interior_max(suction_curvature),
+        pressure_max_abs_curvature=interior_max(pressure_curvature),
+        max_abs_curvature_gradient=max(
+            interior_max(suction_gradient), interior_max(pressure_gradient)
+        ),
+        leading_edge_max_abs_curvature=float(np.max(np.abs(leading_curvature))),
+        trailing_edge_max_abs_curvature=float(np.max(np.abs(trailing_curvature))),
+        signed_area=_signed_area(suction, pressure),
+        full_outline_self_intersects=_polyline_self_intersects(outline, closed=True),
+    )
+
+
+def _polyline_self_intersects(points: np.ndarray, *, closed: bool) -> bool:
+    """检查完整轮廓的非相邻线段相交；共端点的相邻线段不算自交。"""
+
+    if closed:
+        points = np.vstack([points, points[0]])
+    starts = points[:-1]
+    ends = points[1:]
+    segment_count = len(starts)
+
+    def orientation(a, b, c) -> float:
+        return float(np.cross(b - a, c - a))
+
+    for first in range(segment_count):
+        for second in range(first + 2, segment_count):
+            if closed and first == 0 and second == segment_count - 1:
+                continue
+            a, b = starts[first], ends[first]
+            c, d = starts[second], ends[second]
+            if (
+                max(a[0], b[0]) < min(c[0], d[0]) - 1e-13
+                or max(c[0], d[0]) < min(a[0], b[0]) - 1e-13
+                or max(a[1], b[1]) < min(c[1], d[1]) - 1e-13
+                or max(c[1], d[1]) < min(a[1], b[1]) - 1e-13
+            ):
+                continue
+            o1 = orientation(a, b, c)
+            o2 = orientation(a, b, d)
+            o3 = orientation(c, d, a)
+            o4 = orientation(c, d, b)
+            if o1 * o2 < -1e-24 and o3 * o4 < -1e-24:
+                return True
+    return False
 
 
 def _trailing_edge_half_wedge(suction: np.ndarray, pressure: np.ndarray) -> float:

@@ -65,17 +65,41 @@ def resolve_geometry_spec(spec: GeometrySpecV2) -> GeometrySpecV2:
         )
     )
     _, _, reference_camber, _ = reference.arrays()
-    target_u = np.linspace(0.0, 1.0, len(reference_camber))
+    # v1 参考截面按余弦弦向分布；显式曲线的参数必须与真实弦向位置配对，
+    # 不能把非均匀坐标误当作均匀索引，否则厚度峰值位置会系统性前移。
+    target_u = reference_camber[:, 0]
     camber_curve, camber_error = _resolve_camber(spec.camber_family, target_u, reference_camber)
-    half_target = _reference_half_thickness(spec)
-    thickness_curve, thickness_error = _resolve_thickness(
-        spec.thickness_family, target_u, half_target
-    )
     edge = EdgeSpec(
         leading_edge_radius_ratio=intent.leading_edge_radius_ratio,
         trailing_edge_radius_ratio=intent.trailing_edge_radius_ratio,
         trailing_edge_half_wedge_deg=intent.trailing_edge_half_wedge_deg,
     )
+    design_xt = intent.max_thickness_x_ratio
+    amplitude_scale = 1.0
+    thickness_error = math.inf
+    predicted_tmax = math.nan
+    predicted_xt = math.nan
+    for _ in range(6):
+        half_uniform = _reference_half_thickness(
+            spec,
+            max_thickness_x_ratio=design_xt,
+            amplitude_scale=amplitude_scale,
+        )
+        half_target = np.interp(
+            target_u,
+            np.linspace(0.0, 1.0, len(half_uniform)),
+            half_uniform,
+        )
+        thickness_curve, thickness_error = _resolve_thickness(
+            spec.thickness_family, target_u, half_target
+        )
+        predicted_tmax, predicted_xt = _predict_basic_contract(camber_curve, thickness_curve, edge)
+        t_error = intent.max_thickness_ratio - predicted_tmax
+        x_error = intent.max_thickness_x_ratio - predicted_xt
+        if abs(t_error) <= 2e-5 and abs(x_error) <= 5e-4:
+            break
+        amplitude_scale *= intent.max_thickness_ratio / predicted_tmax
+        design_xt = float(np.clip(design_xt + x_error, 0.12, 0.78))
     return spec.model_copy(
         update={
             "camber_curve": camber_curve,
@@ -85,6 +109,8 @@ def resolve_geometry_spec(spec: GeometrySpecV2) -> GeometrySpecV2:
             "resolution_residuals": {
                 "camber_rms": camber_error,
                 "half_thickness_rms": thickness_error,
+                "resolved_tmax_error": predicted_tmax - intent.max_thickness_ratio,
+                "resolved_xt_error": predicted_xt - intent.max_thickness_x_ratio,
             },
         }
     )
@@ -218,8 +244,17 @@ def generate_profile_v2(spec: GeometrySpecV2) -> AirfoilGeometryV2:
             "camber_family": resolved.camber_family.value,
             "thickness_family": resolved.thickness_family.value,
             "construction_chord_ratio": chord,
+            "construction_rotation_deg": math.degrees(math.atan2(chord_vector[1], chord_vector[0])),
             "leading_edge_center": normalize(leading.center[None, :])[0].tolist(),
             "trailing_edge_center": normalize(trailing.center[None, :])[0].tolist(),
+            "leading_suction_contact": normalize(leading.suction_point[None, :])[0].tolist(),
+            "leading_pressure_contact": normalize(leading.pressure_point[None, :])[0].tolist(),
+            "trailing_suction_contact": normalize(trailing.suction_point[None, :])[0].tolist(),
+            "trailing_pressure_contact": normalize(trailing.pressure_point[None, :])[0].tolist(),
+            "leading_suction_parameter": leading.suction_u,
+            "leading_pressure_parameter": leading.pressure_u,
+            "trailing_suction_parameter": trailing.suction_u,
+            "trailing_pressure_parameter": trailing.pressure_u,
         },
     )
 
@@ -297,11 +332,16 @@ def _resolve_camber(family: CurveFamily, target_u: np.ndarray, target: np.ndarra
     return curve, error
 
 
-def _reference_half_thickness(spec: GeometrySpecV2) -> np.ndarray:
+def _reference_half_thickness(
+    spec: GeometrySpecV2,
+    *,
+    max_thickness_x_ratio: float | None = None,
+    amplitude_scale: float = 1.0,
+) -> np.ndarray:
     intent = spec.intent
     u = np.linspace(0.0, 1.0, max(201, spec.points_per_side))
-    xt = intent.max_thickness_x_ratio
-    h = 0.5 * intent.max_thickness_ratio
+    xt = max_thickness_x_ratio or intent.max_thickness_x_ratio
+    h = 0.5 * intent.max_thickness_ratio * amplitude_scale
     fore_x = max(0.03, min(xt * 0.55, xt - 0.02))
     aft_x = min(0.97, max(xt + 0.02, xt + 0.45 * (1.0 - xt)))
     anchors_x = np.array([0.0, fore_x, xt, aft_x, 1.0])
@@ -317,29 +357,67 @@ def _reference_half_thickness(spec: GeometrySpecV2) -> np.ndarray:
     return PchipInterpolator(anchors_x, anchors_y)(u)
 
 
+def _predict_basic_contract(
+    camber_curve,
+    thickness_curve,
+    edge: EdgeSpec,
+) -> tuple[float, float]:
+    """预测闭合轮廓的实际峰值，用于基础模式确定性校准。"""
+
+    camber = CurveEvaluator(camber_curve)
+    thickness = CurveEvaluator(thickness_curve)
+    leading_radius = edge.leading_edge_radius_ratio
+    trailing_radius = edge.trailing_edge_radius_ratio
+    for _ in range(8):
+        leading = _solve_edge_circle(camber, thickness, thickness, leading_radius, leading=True)
+        trailing = _solve_edge_circle(camber, thickness, thickness, trailing_radius, leading=False)
+        le_nose = leading.arc[leading.nose_index]
+        te_nose = trailing.arc[trailing.nose_index]
+        chord_vector = te_nose - le_nose
+        chord = float(np.linalg.norm(chord_vector))
+        next_leading = edge.leading_edge_radius_ratio * chord
+        next_trailing = edge.trailing_edge_radius_ratio * chord
+        if (
+            max(
+                abs(next_leading - leading_radius),
+                abs(next_trailing - trailing_radius),
+            )
+            <= 1e-12
+        ):
+            break
+        leading_radius = next_leading
+        trailing_radius = next_trailing
+
+    parameter = np.linspace(0.0, 1.0, 1601)
+    values = 2.0 * thickness.evaluate(parameter)[:, 0] / chord
+    peak = int(np.argmax(values))
+    rotation = (
+        np.array([[chord_vector[0], chord_vector[1]], [-chord_vector[1], chord_vector[0]]]) / chord
+    )
+    peak_point = (camber.evaluate([parameter[peak]])[0] - le_nose) @ rotation.T / chord
+    return float(values[peak]), float(peak_point[0])
+
+
 def _resolve_thickness(family: CurveFamily, target_u: np.ndarray, target: np.ndarray):
     if len(target) != len(target_u):
-        target = np.interp(target_u, np.linspace(0.0, 1.0, len(target)), target)
+        raise ValueError("厚度目标必须与解析参数一一对应")
     if family == CurveFamily.BEZIER:
         degree = 6
         basis_spec = BezierCurveSpec(degree=degree, control_points=[[0.0]] * (degree + 1))
-        matrix = np.column_stack(
-            [
-                CurveEvaluator(
-                    basis_spec.model_copy(
-                        update={
-                            "control_points": [
-                                [1.0 if row == column else 0.0] for row in range(degree + 1)
-                            ]
-                        }
-                    )
-                ).evaluate(target_u)[:, 0]
-                for column in range(degree + 1)
-            ]
-        )
-        result = lsq_linear(matrix, target, bounds=(0.0, 0.2), tol=1e-14)
-        values = result.x
-        values[[0, -1]] = 0.0
+        evaluators = [
+            CurveEvaluator(
+                basis_spec.model_copy(
+                    update={
+                        "control_points": [
+                            [1.0 if row == column else 0.0] for row in range(degree + 1)
+                        ]
+                    }
+                )
+            )
+            for column in range(degree + 1)
+        ]
+        matrix = np.column_stack([evaluator.evaluate(target_u)[:, 0] for evaluator in evaluators])
+        values = _fit_thickness_controls(matrix, evaluators, target_u, target)
         curve = BezierCurveSpec(degree=degree, control_points=[[float(value)] for value in values])
     else:
         knots = open_uniform_knots(7, 3)
@@ -348,7 +426,7 @@ def _resolve_thickness(family: CurveFamily, target_u: np.ndarray, target: np.nda
             if family == CurveFamily.NURBS
             else None
         )
-        columns = []
+        evaluators = []
         for column in range(7):
             controls = [[1.0 if row == column else 0.0] for row in range(7)]
             if weights is None:
@@ -360,11 +438,9 @@ def _resolve_thickness(family: CurveFamily, target_u: np.ndarray, target: np.nda
                     knots=knots,
                     weights=weights.tolist(),
                 )
-            columns.append(CurveEvaluator(basis_curve).evaluate(target_u)[:, 0])
-        matrix = np.column_stack(columns)
-        result = lsq_linear(matrix, target, bounds=(0.0, 0.2), tol=1e-14)
-        values = result.x
-        values[[0, -1]] = 0.0
+            evaluators.append(CurveEvaluator(basis_curve))
+        matrix = np.column_stack([evaluator.evaluate(target_u)[:, 0] for evaluator in evaluators])
+        values = _fit_thickness_controls(matrix, evaluators, target_u, target)
         if weights is None:
             curve = BSplineCurveSpec(
                 degree=3,
@@ -380,6 +456,19 @@ def _resolve_thickness(family: CurveFamily, target_u: np.ndarray, target: np.nda
             )
     predicted = CurveEvaluator(curve).evaluate(target_u)[:, 0]
     return curve, float(np.sqrt(np.mean((predicted - target) ** 2)))
+
+
+def _fit_thickness_controls(
+    matrix: np.ndarray,
+    evaluators: list[CurveEvaluator],
+    target_u: np.ndarray,
+    target: np.ndarray,
+) -> np.ndarray:
+    """在固定零端点下拟合非负中间控制值。"""
+
+    del evaluators, target_u
+    result = lsq_linear(matrix[:, 1:-1], target, bounds=(0.0, 0.2), tol=1e-14)
+    return np.concatenate([[0.0], result.x, [0.0]])
 
 
 def _side_point_and_tangent(

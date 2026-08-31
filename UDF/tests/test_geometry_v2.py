@@ -7,6 +7,7 @@ import pytest
 
 from cascade_forge.geometry2d import generate_profile
 from cascade_forge.models_v2 import CurveFamily, GeometryIntentV2, GeometrySpecV2
+from cascade_forge.validation import validate_profile
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +49,9 @@ def test_all_nine_curve_combinations(
     assert geometry.edge_metrics["trailing_tangency_error_deg"] <= 0.05
     assert abs(geometry.edge_metrics["leading_edge_radius_ratio"] - 0.008) <= 1e-8
     assert abs(geometry.edge_metrics["trailing_edge_radius_ratio"] - 0.002) <= 1e-8
+    report = validate_profile(geometry)
+    assert report.valid, [issue.model_dump() for issue in report.issues]
+    assert report.rule_version == "geometry-rules-v2"
 
     for arc_name, center_name, target_radius in (
         ("leading_edge_arc", "leading_edge_center", 0.008),
