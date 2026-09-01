@@ -1,25 +1,21 @@
 dataset_name: geometry-v2.0.0
 schema_version: "2.0.0"
-generator_version: multi-curve-normal-offset-v2
-seed: 20260831
+generator_version: unified-bspline-g2-v2
+seed: 20260901
 target_valid: 20000
 points_per_side: 201
 batch_size: 256
-sampling_policy: paired-intents
-curve_families: [bezier, bspline, nurbs]
-extra_combinations:
-  - [bezier, bspline]
-  - [nurbs, nurbs]
+sampling_policy: unified-bspline-g2
 parameters:
   inlet_metal_angle_deg: [20.0, 75.0]
   turning_angle_deg: [0.0, 65.0]
-  quarter_angle_bias_deg: [-10.0, 10.0]
-  three_quarter_angle_bias_deg: [-10.0, 10.0]
+  stagger_deg: [15.0, 65.0]
+  camber_le_tangent_ratio: [0.15, 0.65]
+  camber_te_tangent_ratio: [0.15, 0.65]
   max_thickness_ratio: [0.04, 0.15]
   max_thickness_x_ratio: [0.25, 0.60]
   leading_edge_radius_ratio: [0.002, 0.012]
   trailing_edge_radius_ratio: [0.0005, 0.006]
-  trailing_edge_half_wedge_deg: [2.0, 15.0]
   fore_shape_factor: [0.65, 1.45]
   aft_shape_factor: [0.65, 1.45]
 constraints:
@@ -33,4 +29,5 @@ constraints:
   maximum_metal_angle_error_deg: 0.05
   maximum_edge_radius_error: 1.0e-8
   maximum_tangency_error_deg: 0.05
-
+  maximum_normal_fit_rms: 2.0e-4
+  maximum_normal_fit_error: 1.0e-3

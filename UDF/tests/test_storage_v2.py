@@ -16,6 +16,7 @@ def _geometry():
             intent=GeometryIntentV2(
                 inlet_metal_angle_deg=55.0,
                 turning_angle_deg=25.0,
+                stagger_deg=42.0,
                 max_thickness_ratio=0.1,
                 max_thickness_x_ratio=0.42,
                 leading_edge_radius_ratio=0.008,
@@ -31,16 +32,17 @@ def test_v2_store_round_trip_and_filters(tmp_path) -> None:
     features = extract_features(geometry)
     report = validate_profile(geometry)
     store.append_geometries(
-        [(geometry, features, report, {"intent_group_index": 0, "proposal_index": 2})],
-        batch_metadata={"accepted_groups": 1},
+        [(geometry, features, report, {"proposal_index": 2})],
+        batch_metadata={"accepted": 1},
     )
     assert store.count("generated") == 1
     assert store.geometry_ids() == {geometry.geometry_id}
     rebuilt = store.get_geometry(geometry.geometry_id)
     assert rebuilt is not None
     assert rebuilt.model_dump(mode="json") == geometry.model_dump(mode="json")
-    rows = store.list_geometries(camber_family="bezier", thickness_family="bspline")
+    rows = store.list_geometries(status=report.status.value, origin="generated")
     assert rows[0]["intent_id"] == geometry.intent_id
+    assert rows[0]["kernel"] == "unified_bspline_g2"
     batch = json.loads(next(store.batch_dir.glob("*.json")).read_text(encoding="utf-8"))
     assert batch["row_count"] == 1
 

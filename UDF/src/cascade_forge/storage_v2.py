@@ -346,12 +346,26 @@ class DatasetStoreV2:
         if self.anchor_count() != 48 or self.fit_count() != 48:
             return False
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
-            rejected = int(
+            unique_anchors = int(
                 connection.execute(
-                    "SELECT count(*) FROM anchor_fits_v2 WHERE fit_status = 'rejected'"
+                    "SELECT count(DISTINCT geometry_id) FROM anchors_v1"
                 ).fetchone()[0]
             )
-        return rejected == 0
+            fit_count, unique_sources, rejected, missing_geometry = connection.execute(
+                """
+                SELECT count(*), count(DISTINCT source_anchor_id),
+                       count(*) FILTER (WHERE fit_status = 'rejected'),
+                       count(*) FILTER (WHERE geometry_id IS NULL)
+                FROM anchor_fits_v2
+                """
+            ).fetchone()
+        return (
+            unique_anchors == 48
+            and fit_count == 48
+            and unique_sources == 48
+            and rejected == 0
+            and missing_geometry == 0
+        )
 
     def geometry_ids(self) -> set[str]:
         if not any(self.geometry_dir.glob("*.parquet")):

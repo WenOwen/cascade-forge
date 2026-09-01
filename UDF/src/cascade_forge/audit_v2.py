@@ -37,16 +37,16 @@ def audit_dataset_v2(
 
     with store._lock, duckdb.connect(str(store.catalog_path)) as connection:
         generated, unique_generated = connection.execute(
-            """
-            SELECT count(*), count(DISTINCT geometry_id)
-            FROM geometries_v2 WHERE origin = 'generated'
-            """
+            "SELECT count(*), count(DISTINCT geometry_id) "
+            "FROM geometries_v2 WHERE origin = 'generated'"
         ).fetchone()
         rejected_records = connection.execute(
-            """
-            SELECT count(*) FROM geometries_v2
-            WHERE origin = 'generated' AND validation_status = 'rejected'
-            """
+            "SELECT count(*) FROM geometries_v2 "
+            "WHERE origin = 'generated' AND validation_status = 'rejected'"
+        ).fetchone()[0]
+        wrong_kernel = connection.execute(
+            "SELECT count(*) FROM geometries_v2 "
+            "WHERE origin = 'generated' AND kernel != 'unified_bspline_g2'"
         ).fetchone()[0]
         wrong_lengths = connection.execute(
             """
@@ -59,30 +59,14 @@ def audit_dataset_v2(
             )
             """
         ).fetchone()[0]
-        group_rows = connection.execute(
-            """
-            SELECT intent_group_index, count(*),
-                   count(DISTINCT camber_family || 'x' || thickness_family)
-            FROM geometries_v2
-            WHERE origin = 'generated' AND NOT is_extra
-            GROUP BY intent_group_index
-            """
-        ).fetchall()
-        extra_rows = connection.execute(
-            """
-            SELECT camber_family, thickness_family, count(*)
-            FROM geometries_v2
-            WHERE origin = 'generated' AND is_extra
-            GROUP BY camber_family, thickness_family
-            ORDER BY camber_family, thickness_family
-            """
-        ).fetchall()
         max_errors = connection.execute(
             """
             SELECT max(CAST(json_extract(validation_json,
                         '$.metrics.closure_error') AS DOUBLE)),
                    max(CAST(json_extract(validation_json,
-                        '$.metrics.normal_offset_error') AS DOUBLE)),
+                        '$.metrics.normal_fit_rms') AS DOUBLE)),
+                   max(CAST(json_extract(validation_json,
+                        '$.metrics.normal_fit_max') AS DOUBLE)),
                    max(CAST(json_extract(validation_json,
                         '$.metrics.leading_edge_radius_error') AS DOUBLE)),
                    max(CAST(json_extract(validation_json,
@@ -124,25 +108,23 @@ def audit_dataset_v2(
 
     hash_failures: list[str] = []
     if manifest is not None:
-        for relative, expected in manifest.files.items():
+        for relative, expected_hash in manifest.files.items():
             path = root / relative
-            if not path.exists() or file_sha256(path) != expected:
+            if not path.exists() or file_sha256(path) != expected_hash:
                 hash_failures.append(relative)
 
     expected = manifest.generated_valid if manifest else int(generated)
-    group_contract = all(count == 9 and combinations == 9 for _, count, combinations in group_rows)
-    expected_groups = manifest.complete_intent_groups if manifest else len(group_rows)
-    expected_extras = manifest.extra_records if manifest else sum(row[2] for row in extra_rows)
     anchors = store.anchor_count()
     fits = store.fit_count()
     metrics = {
         "max_closure_error_c": float(max_errors[0] or 0.0),
-        "max_normal_offset_error_c": float(max_errors[1] or 0.0),
-        "max_le_radius_error_c": float(max_errors[2] or 0.0),
-        "max_te_radius_error_c": float(max_errors[3] or 0.0),
-        "max_thickness_error_c": float(max_errors[4] or 0.0),
-        "max_thickness_x_error_c": float(max_errors[5] or 0.0),
-        "max_metal_angle_error_deg": float(max_errors[6] or 0.0),
+        "max_normal_fit_rms_c": float(max_errors[1] or 0.0),
+        "max_normal_fit_error_c": float(max_errors[2] or 0.0),
+        "max_le_radius_error_c": float(max_errors[3] or 0.0),
+        "max_te_radius_error_c": float(max_errors[4] or 0.0),
+        "max_thickness_error_c": float(max_errors[5] or 0.0),
+        "max_thickness_x_error_c": float(max_errors[6] or 0.0),
+        "max_metal_angle_error_deg": float(max_errors[7] or 0.0),
         "rebuild_sample": len(sample_rows),
         "max_rebuild_coordinate_error_c": rebuild_error,
     }
@@ -151,12 +133,11 @@ def audit_dataset_v2(
         "generated_count": int(generated) == int(expected),
         "unique_geometry_ids": generated == unique_generated,
         "generated_status": rejected_records == 0,
+        "unified_kernel_only": wrong_kernel == 0,
         "fixed_coordinate_length": wrong_lengths == 0,
-        "paired_group_count": len(group_rows) == expected_groups,
-        "paired_group_completeness": group_contract,
-        "extra_count": sum(row[2] for row in extra_rows) == expected_extras,
         "closure": metrics["max_closure_error_c"] <= 1e-10,
-        "normal_offset": metrics["max_normal_offset_error_c"] <= 1e-10,
+        "normal_fit_rms": metrics["max_normal_fit_rms_c"] <= 2e-4,
+        "normal_fit_max": metrics["max_normal_fit_error_c"] <= 1e-3,
         "edge_radius": max(metrics["max_le_radius_error_c"], metrics["max_te_radius_error_c"])
         <= 1e-8,
         "maximum_thickness": metrics["max_thickness_error_c"] <= 5e-4,
@@ -164,21 +145,20 @@ def audit_dataset_v2(
         "metal_angles": metrics["max_metal_angle_error_deg"] <= 0.05,
         "artifact_hashes": not hash_failures,
         "deterministic_rebuild": rebuild_ids and rebuild_error <= 1e-12,
-        "anchors": (anchors == 48 and fits == 432) if require_anchors else True,
+        "anchors": (
+            anchors == 48 and fits == 48 and store.anchor_gate_passed()
+            if require_anchors
+            else True
+        ),
     }
     return {
         "valid": all(checks.values()),
         "counts": {
             "generated": int(generated),
             "unique_generated": int(unique_generated),
-            "complete_intent_groups": len(group_rows),
-            "extras": int(sum(row[2] for row in extra_rows)),
             "anchors": anchors,
             "anchor_fits": fits,
             "rejected_proposals": store.rejected_count(),
-        },
-        "extra_distribution": {
-            f"{camber}x{thickness}": int(count) for camber, thickness, count in extra_rows
         },
         "metrics": metrics,
         "checks": checks,
