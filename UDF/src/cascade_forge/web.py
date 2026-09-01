@@ -478,7 +478,7 @@ def create_app(
         return audit_dataset_v2(
             resolved_v2_root,
             rebuild_sample=rebuild_sample,
-            require_anchors=False,
+            require_anchors=True,
         )
 
     @application.get("/api/v2/jobs")
