@@ -7,7 +7,7 @@ from cascade_forge.fitting_v2 import (
     fit_anchor_geometry,
     load_legacy_anchor_geometries,
 )
-from cascade_forge.models_v2 import CurveFamily, DatasetManifestV2
+from cascade_forge.models_v2 import DatasetManifestV2
 from cascade_forge.storage_v2 import DatasetStoreV2
 
 RAW_ROOT = Path(__file__).parents[1] / "data" / "raw" / "nasa120859"
@@ -21,16 +21,24 @@ def test_loads_exactly_48_read_only_anchors() -> None:
     assert any("可疑尾缘半径" in item for item in r1e.metadata["source_warnings"])
 
 
-def test_anchor_fit_is_traceable_and_keeps_fit_even_when_rejected() -> None:
+def test_anchor_fit_is_traceable_and_reports_core_and_full_error() -> None:
     anchor = load_legacy_anchor_geometries(RAW_ROOT)[0]
-    record, geometry = fit_anchor_geometry(anchor, CurveFamily.BEZIER, CurveFamily.BSPLINE)
+    record, geometry = fit_anchor_geometry(
+        anchor,
+        max_outer_iterations=4,
+        max_design_evaluations=60,
+    )
     assert record.source_anchor_id == anchor.geometry_id
     assert geometry.source_id == anchor.geometry_id
     assert geometry.origin == "anchor_fit"
     assert record.geometry_id == geometry.geometry_id
-    assert record.fit_status in {"valid", "warning", "rejected"}
+    assert record.fit_status in {"valid", "warning"}
+    assert record.core_domain_x_ratio == (0.02, 0.98)
+    assert 0.0 <= record.core_rms_distance_ratio <= 2.5e-3
+    assert record.core_rms_distance_ratio <= record.core_max_distance_ratio <= 8e-3
     assert record.rms_distance_ratio >= 0.0
     assert record.max_distance_ratio >= record.rms_distance_ratio
+    assert record.iterations >= 1
 
 
 def test_fit_refreshes_existing_dataset_manifest(tmp_path) -> None:
@@ -39,8 +47,6 @@ def test_fit_refreshes_existing_dataset_manifest(tmp_path) -> None:
         DatasetManifestV2(
             target_valid=1,
             generated_valid=1,
-            complete_intent_groups=0,
-            extra_records=1,
             proposals=1,
             rejected_proposals=0,
             acceptance_rate=1.0,

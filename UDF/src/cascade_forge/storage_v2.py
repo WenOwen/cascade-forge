@@ -16,6 +16,7 @@ from .models import AirfoilGeometry, ValidationReport, file_sha256
 from .models_v2 import (
     AirfoilGeometryV2,
     AnchorFitRecord,
+    BSplineCurveSpec,
     DatasetManifestV2,
     GeometryFeaturesV2,
     GeometrySpecV2,
@@ -115,10 +116,10 @@ class DatasetStoreV2:
                     """
                     CREATE OR REPLACE VIEW geometry_search_v2 AS
                     SELECT geometry_id, intent_id, origin, source_id,
-                           camber_family, thickness_family, validation_status,
+                           kernel, validation_status,
                            inlet_metal_angle_deg, outlet_metal_angle_deg,
                            max_thickness_ratio, max_thickness_x_ratio,
-                           intent_group_index, proposal_index, created_at
+                           proposal_index, created_at
                     FROM geometries_v2
                     """
                 )
@@ -130,14 +131,12 @@ class DatasetStoreV2:
                            CAST(NULL AS VARCHAR) intent_id,
                            CAST(NULL AS VARCHAR) origin,
                            CAST(NULL AS VARCHAR) source_id,
-                           CAST(NULL AS VARCHAR) camber_family,
-                           CAST(NULL AS VARCHAR) thickness_family,
+                           CAST(NULL AS VARCHAR) kernel,
                            CAST(NULL AS VARCHAR) validation_status,
                            CAST(NULL AS DOUBLE) inlet_metal_angle_deg,
                            CAST(NULL AS DOUBLE) outlet_metal_angle_deg,
                            CAST(NULL AS DOUBLE) max_thickness_ratio,
                            CAST(NULL AS DOUBLE) max_thickness_x_ratio,
-                           CAST(NULL AS BIGINT) intent_group_index,
                            CAST(NULL AS BIGINT) proposal_index,
                            CAST(NULL AS TIMESTAMP) created_at
                     WHERE false
@@ -321,13 +320,16 @@ class DatasetStoreV2:
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             result = connection.execute(
                 """
-                SELECT fit_id, source_anchor_id, geometry_id, camber_family,
-                       thickness_family, rms_distance_ratio, max_distance_ratio,
-                       hausdorff_approx_ratio, fit_status, source_warnings
+                SELECT fit_id, source_anchor_id, geometry_id,
+                       rms_distance_ratio, max_distance_ratio,
+                       hausdorff_approx_ratio, core_rms_distance_ratio,
+                       core_max_distance_ratio, core_domain_x_ratio,
+                       fit_status, iterations, converged,
+                       termination_reason, source_warnings
                 FROM anchor_fits_v2
                 """
                 + where
-                + " ORDER BY source_anchor_id, camber_family, thickness_family "
+                + " ORDER BY source_anchor_id "
                 "LIMIT ? OFFSET ?",
                 parameters,
             )
@@ -340,22 +342,16 @@ class DatasetStoreV2:
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             return int(connection.execute("SELECT count(*) FROM anchors_v1").fetchone()[0])
 
-    def complete_group_count(self) -> int:
-        if not any(self.geometry_dir.glob("*.parquet")):
-            return 0
+    def anchor_gate_passed(self) -> bool:
+        if self.anchor_count() != 48 or self.fit_count() != 48:
+            return False
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
-            return int(
+            rejected = int(
                 connection.execute(
-                    """
-                    SELECT count(*) FROM (
-                      SELECT intent_group_index
-                      FROM geometries_v2
-                      WHERE origin = 'generated' AND NOT is_extra
-                      GROUP BY intent_group_index HAVING count(*) = 9
-                    )
-                    """
+                    "SELECT count(*) FROM anchor_fits_v2 WHERE fit_status = 'rejected'"
                 ).fetchone()[0]
             )
+        return rejected == 0
 
     def geometry_ids(self) -> set[str]:
         if not any(self.geometry_dir.glob("*.parquet")):
@@ -385,8 +381,6 @@ class DatasetStoreV2:
         *,
         limit: int = 100,
         offset: int = 0,
-        camber_family: str | None = None,
-        thickness_family: str | None = None,
         status: str | None = None,
         origin: str | None = None,
         sort: str = "geometry_id",
@@ -405,12 +399,7 @@ class DatasetStoreV2:
             raise ValueError(f"不支持的排序字段: {sort}")
         where: list[str] = []
         parameters: list[Any] = []
-        for column, value in (
-            ("camber_family", camber_family),
-            ("thickness_family", thickness_family),
-            ("validation_status", status),
-            ("origin", origin),
-        ):
+        for column, value in (("validation_status", status), ("origin", origin)):
             if value:
                 where.append(f"{column} = ?")
                 parameters.append(value)
@@ -519,12 +508,9 @@ def _geometry_record_v2(
         "intent_id": geometry.intent_id,
         "origin": geometry.origin,
         "source_id": geometry.source_id,
-        "camber_family": features.camber_family.value,
-        "thickness_family": features.thickness_family.value,
+        "kernel": features.kernel,
         "validation_status": report.status.value,
-        "intent_group_index": context.get("intent_group_index"),
         "proposal_index": context.get("proposal_index"),
-        "is_extra": bool(context.get("is_extra", False)),
         "spec_json": geometry.spec.model_dump_json(),
         "explicit_curves_json": json.dumps(
             {
@@ -562,8 +548,10 @@ def _geometry_record_v2(
         "thickness": thickness.tolist(),
         "normal_x": [item[0] for item in normals],
         "normal_y": [item[1] for item in normals],
-        "leading_edge_arc_json": json.dumps(geometry.leading_edge_arc),
-        "trailing_edge_arc_json": json.dumps(geometry.trailing_edge_arc),
+        "suction_surface_curve_json": geometry.suction_surface_curve.model_dump_json(),
+        "pressure_surface_curve_json": geometry.pressure_surface_curve.model_dump_json(),
+        "leading_osculating_circle_json": json.dumps(geometry.leading_osculating_circle),
+        "trailing_osculating_circle_json": json.dumps(geometry.trailing_osculating_circle),
         "realized_stagger_deg": geometry.realized_stagger_deg,
         "created_at": datetime.now(UTC).isoformat(),
     }
@@ -584,8 +572,14 @@ def _record_geometry_v2(record: dict[str, Any]) -> AirfoilGeometryV2:
         camber=points("camber_x", "camber_y"),
         thickness=record["thickness"],
         normals=points("normal_x", "normal_y"),
-        leading_edge_arc=json.loads(record["leading_edge_arc_json"]),
-        trailing_edge_arc=json.loads(record["trailing_edge_arc_json"]),
+        suction_surface_curve=BSplineCurveSpec.model_validate_json(
+            record["suction_surface_curve_json"]
+        ),
+        pressure_surface_curve=BSplineCurveSpec.model_validate_json(
+            record["pressure_surface_curve_json"]
+        ),
+        leading_osculating_circle=json.loads(record["leading_osculating_circle_json"]),
+        trailing_osculating_circle=json.loads(record["trailing_osculating_circle_json"]),
         realized_stagger_deg=record["realized_stagger_deg"],
         edge_metrics=json.loads(record["edge_metrics_json"]),
         metadata=json.loads(record["metadata_json"]),

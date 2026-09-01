@@ -219,6 +219,9 @@ class AnchorFitRecord(BaseModel):
     rms_distance_ratio: float
     max_distance_ratio: float
     hausdorff_approx_ratio: float
+    core_rms_distance_ratio: float
+    core_max_distance_ratio: float
+    core_domain_x_ratio: tuple[float, float] = (0.02, 0.98)
     fit_status: Literal["valid", "warning", "rejected"]
     iterations: int = 0
     converged: bool = False
