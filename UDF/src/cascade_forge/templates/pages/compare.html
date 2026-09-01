@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block page_title %}叶型比较{% endblock %}
 {% block content %}
-<section class="surface-card" data-compare-root><form class="inline-form" data-compare-form><label>Geometry IDs（每行一个）<textarea name="ids" rows="3" placeholder="geo_v2_…&#10;geo_v2_…" required></textarea></label><button class="button primary" type="submit">叠加比较</button></form><div id="compare-chart" class="plotly-chart large-chart empty-chart" data-empty="输入至少两个 Geometry ID"></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Geometry ID</th><th>组合</th><th>tmax/c</th><th>xt/c</th><th>最大弯度</th><th>LE r/c</th><th>TE r/c</th></tr></thead><tbody data-compare-body></tbody></table></div></section>
+<section class="surface-card" data-compare-root><form class="inline-form" data-compare-form><label>Geometry IDs（每行一个）<textarea name="ids" rows="3" placeholder="geo_v2_…&#10;geo_v2_…" required></textarea></label><button class="button primary" type="submit">叠加比较</button></form><div id="compare-chart" class="plotly-chart large-chart empty-chart" data-empty="输入至少两个 Geometry ID"></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Geometry ID</th><th>内核</th><th>tmax/c</th><th>xt/c</th><th>最大弯度</th><th>LE r/c</th><th>TE r/c</th></tr></thead><tbody data-compare-body></tbody></table></div></section>
 {% endblock %}

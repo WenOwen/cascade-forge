@@ -32,7 +32,7 @@ def _seed_v2(path):
                 geometry,
                 extract_features(geometry),
                 validate_profile(geometry),
-                {"intent_group_index": 0, "proposal_index": 0},
+                {"proposal_index": 0},
             )
         ]
     )
@@ -59,13 +59,17 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         spec = GeometrySpecV2(intent=geometry.spec.intent)
         preview = client.post("/api/v2/preview", json=spec.model_dump(mode="json"))
         assert preview.status_code == 200
+        payload = preview.json()
+        assert payload["geometry"]["leading_osculating_circle"]
+        assert payload["geometry"]["trailing_osculating_circle"]
+        assert payload["features"]["kernel"] == "unified_bspline_g2"
         resolved = client.post("/api/v2/curves/resolve", json=spec.model_dump(mode="json"))
         assert resolved.status_code == 200
         assert resolved.json()["spec"]["camber_curve"] is not None
 
         listing = client.get(
             "/api/v2/geometries",
-            params={"camber_family": "bezier", "thickness_family": "bspline"},
+            params={"origin": "generated", "status": "warning"},
         ).json()
         assert listing["total"] == 1
         assert listing["items"][0]["geometry_id"] == geometry.geometry_id
@@ -98,6 +102,11 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         fits = client.get("/api/v2/anchor-fits")
         assert fits.status_code == 200
         assert fits.json()["total"] == 0
+
+        studio = client.get("/studio")
+        assert studio.status_code == 200
+        assert "密切圆半径" in studio.text
+        assert "Bezier" not in studio.text
 
 
 def test_v2_blade_job_and_artifact_download(tmp_path) -> None:

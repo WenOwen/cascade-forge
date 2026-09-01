@@ -11,9 +11,10 @@ from cascade_forge.storage_v2 import DatasetStoreV2
 from cascade_forge.workspace import WorkspaceStore
 
 
-def test_cli_v2_generate_export_and_audit_dispatch(tmp_path) -> None:
+def test_cli_v2_generate_export_and_audit_dispatch(tmp_path, monkeypatch) -> None:
     runner = CliRunner()
     dataset = tmp_path / "v2"
+    monkeypatch.setattr(DatasetStoreV2, "anchor_gate_passed", lambda self: True)
     generated = runner.invoke(
         app,
         [

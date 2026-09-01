@@ -266,8 +266,6 @@ def create_app(
     def list_geometries_v2(
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
-        camber_family: str | None = None,
-        thickness_family: str | None = None,
         status: str | None = None,
         origin: str | None = None,
         sort: str = "geometry_id",
@@ -277,8 +275,6 @@ def create_app(
             items = store_v2.list_geometries(
                 limit=limit,
                 offset=offset,
-                camber_family=camber_family,
-                thickness_family=thickness_family,
                 status=status,
                 origin=origin,
                 sort=sort,
@@ -669,11 +665,11 @@ def _default_spec_v2() -> GeometrySpecV2:
         intent=GeometryIntentV2(
             inlet_metal_angle_deg=55.0,
             turning_angle_deg=25.0,
+            stagger_deg=42.0,
             max_thickness_ratio=0.10,
             max_thickness_x_ratio=0.42,
             leading_edge_radius_ratio=0.008,
             trailing_edge_radius_ratio=0.002,
-            trailing_edge_half_wedge_deg=8.0,
         )
     )
 
@@ -685,7 +681,7 @@ def _page_context(page: str, store: DatasetStoreV2, workspace: WorkspaceStore) -
         "v2_anchors": store.anchor_count(),
         "v2_fits": store.fit_count(),
         "v2_rejected": store.rejected_count(),
-        "v2_groups": store.complete_group_count(),
+        "anchor_gate_passed": store.anchor_gate_passed(),
         "workspace_count": len(workspace.list_designs(limit=1000)),
     }
 
