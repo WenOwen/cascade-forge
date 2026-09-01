@@ -1,50 +1,63 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from cascade_forge.curves import CurveEvaluator, open_uniform_knots
-from cascade_forge.models_v2 import (
-    BezierCurveSpec,
-    BSplineCurveSpec,
-    NURBSCurveSpec,
+from cascade_forge.curves import (
+    CurveEvaluator,
+    open_uniform_knots,
+    signed_curvature,
+    unit_tangent_and_normal,
 )
+from cascade_forge.models_v2 import BSplineCurveSpec
 
 
-def test_bezier_endpoints_and_derivative() -> None:
-    curve = BezierCurveSpec(
-        degree=3,
-        control_points=[[0.0, 0.0], [0.2, 0.3], [0.7, 0.2], [1.0, 0.0]],
-    )
+def _curve() -> BSplineCurveSpec:
+    controls = [
+        [0.0, 0.0],
+        [0.12, 0.18],
+        [0.32, 0.26],
+        [0.58, 0.20],
+        [0.82, 0.08],
+        [1.0, 0.0],
+    ]
+    return BSplineCurveSpec(control_points=controls, knots=open_uniform_knots(len(controls)))
+
+
+def test_open_clamped_bspline_endpoints_and_analytic_derivatives() -> None:
+    curve = _curve()
     evaluator = CurveEvaluator(curve)
-    np.testing.assert_allclose(evaluator.evaluate([0.0, 1.0]), [[0.0, 0.0], [1.0, 0.0]])
-    np.testing.assert_allclose(evaluator.evaluate([0.0], 1)[0], [0.6, 0.9])
-
-
-def test_open_clamped_spline_endpoints() -> None:
-    controls = [[0.0, 0.0], [0.2, 0.2], [0.4, 0.3], [0.7, 0.2], [0.9, 0.1], [1.0, 0.0]]
-    knots = open_uniform_knots(len(controls), 3)
-    curve = BSplineCurveSpec(degree=3, control_points=controls, knots=knots)
     np.testing.assert_allclose(
-        CurveEvaluator(curve).evaluate([0.0, 1.0]),
-        [controls[0], controls[-1]],
+        evaluator.evaluate([0.0, 1.0]),
+        [curve.control_points[0], curve.control_points[-1]],
         atol=1e-14,
     )
 
-
-def test_nurbs_all_one_weights_equal_bspline_and_scale_invariant() -> None:
-    controls = [[0.0, 0.0], [0.2, 0.2], [0.4, 0.3], [0.7, 0.2], [0.9, 0.1], [1.0, 0.0]]
-    knots = open_uniform_knots(len(controls), 3)
-    spline = BSplineCurveSpec(degree=3, control_points=controls, knots=knots)
-    nurbs_one = NURBSCurveSpec(
-        degree=3, control_points=controls, knots=knots, weights=[1.0] * len(controls)
-    )
-    nurbs_scaled = nurbs_one.model_copy(update={"weights": [3.0] * len(controls)})
-    u = np.linspace(0.0, 1.0, 101)
-    expected = CurveEvaluator(spline).evaluate(u)
-    np.testing.assert_allclose(CurveEvaluator(nurbs_one).evaluate(u), expected, atol=1e-13)
-    np.testing.assert_allclose(CurveEvaluator(nurbs_scaled).evaluate(u), expected, atol=1e-13)
+    parameter = np.array([0.17, 0.43, 0.79])
+    step = 1e-6
+    finite_difference = (
+        evaluator.evaluate(parameter + step) - evaluator.evaluate(parameter - step)
+    ) / (2.0 * step)
     np.testing.assert_allclose(
-        CurveEvaluator(nurbs_scaled).evaluate(u, 1),
-        CurveEvaluator(nurbs_one).evaluate(u, 1),
-        atol=1e-12,
+        evaluator.evaluate(parameter, 1), finite_difference, rtol=2e-8, atol=2e-9
     )
+
+
+def test_unit_normal_and_signed_curvature_are_finite() -> None:
+    evaluator = CurveEvaluator(_curve())
+    parameter = np.linspace(0.0, 1.0, 101)
+    tangent, normal = unit_tangent_and_normal(evaluator, parameter)
+    np.testing.assert_allclose(np.linalg.norm(tangent, axis=1), 1.0, atol=1e-13)
+    np.testing.assert_allclose(np.linalg.norm(normal, axis=1), 1.0, atol=1e-13)
+    np.testing.assert_allclose(np.sum(tangent * normal, axis=1), 0.0, atol=1e-13)
+    assert np.all(np.isfinite(signed_curvature(evaluator, parameter)))
+
+
+def test_unified_kernel_rejects_non_cubic_or_non_clamped_splines() -> None:
+    with pytest.raises(ValueError, match="三次"):
+        open_uniform_knots(6, degree=2)
+    with pytest.raises(ValueError, match="开放夹持"):
+        BSplineCurveSpec(
+            control_points=[[0.0], [0.1], [0.2], [0.3]],
+            knots=[0.0, 0.0, 0.0, 0.1, 0.9, 1.0, 1.0, 1.0],
+        )

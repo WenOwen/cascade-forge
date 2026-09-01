@@ -4,108 +4,48 @@ import math
 
 import numpy as np
 from scipy.interpolate import BSpline
-from scipy.special import comb
 
-from .models_v2 import (
-    BezierCurveSpec,
-    BSplineCurveSpec,
-    CurveSpec,
-    NURBSCurveSpec,
-)
+from .models_v2 import BSplineCurveSpec
 
 
 class CurveEvaluator:
-    """统一的 Bezier、B-spline 和 NURBS 解析求值器。"""
+    """三次开放夹持 B-spline 位置与解析导数求值器。"""
 
-    def __init__(self, spec: CurveSpec):
+    def __init__(self, spec: BSplineCurveSpec):
         self.spec = spec
         self.control_points = np.asarray(spec.control_points, dtype=float)
         self.dimension = self.control_points.shape[1]
-        self._bspline: BSpline | None = None
-        self._nurbs_numerator: BSpline | None = None
-        self._nurbs_denominator: BSpline | None = None
-        if isinstance(spec, (BSplineCurveSpec, NURBSCurveSpec)):
-            self.domain = (float(spec.knots[spec.degree]), float(spec.knots[-spec.degree - 1]))
-            if isinstance(spec, BSplineCurveSpec):
-                self._bspline = BSpline(
-                    spec.knots,
-                    self.control_points,
-                    spec.degree,
-                    extrapolate=False,
-                )
-            else:
-                weights = np.asarray(spec.weights, dtype=float)
-                self._nurbs_numerator = BSpline(
-                    spec.knots,
-                    self.control_points * weights[:, None],
-                    spec.degree,
-                    extrapolate=False,
-                )
-                self._nurbs_denominator = BSpline(
-                    spec.knots,
-                    weights,
-                    spec.degree,
-                    extrapolate=False,
-                )
-        else:
-            self.domain = (0.0, 1.0)
+        self.domain = (float(spec.knots[spec.degree]), float(spec.knots[-spec.degree - 1]))
+        self._bspline = BSpline(
+            spec.knots,
+            self.control_points,
+            spec.degree,
+            extrapolate=False,
+        )
 
-    def evaluate(self, parameter: np.ndarray | float, derivative: int = 0) -> np.ndarray:
+    def evaluate(
+        self,
+        parameter: np.ndarray | list[float] | float,
+        derivative: int = 0,
+    ) -> np.ndarray:
         u = np.asarray(parameter, dtype=float)
+        if derivative < 0 or derivative > self.spec.degree:
+            raise ValueError("导数阶数超出三次 B-spline 合同")
         if np.any(u < self.domain[0] - 1e-12) or np.any(u > self.domain[1] + 1e-12):
             raise ValueError("曲线参数超出有效区间")
-        if isinstance(self.spec, BezierCurveSpec):
-            return self._bezier(u, derivative)
-        if isinstance(self.spec, BSplineCurveSpec):
-            assert self._bspline is not None
-            return np.asarray(self._bspline(u, nu=derivative), dtype=float)
-        return self._nurbs(u, derivative)
-
-    def _bezier(self, u: np.ndarray, derivative: int) -> np.ndarray:
-        controls = self.control_points
-        degree = self.spec.degree
-        if derivative > degree:
-            shape = u.shape + (self.dimension,)
-            return np.zeros(shape)
-        for _ in range(derivative):
-            controls = degree * np.diff(controls, axis=0)
-            degree -= 1
-        flat = u.reshape(-1)
-        basis = np.column_stack(
-            [comb(degree, i) * flat**i * (1.0 - flat) ** (degree - i) for i in range(degree + 1)]
-        )
-        result = basis @ controls
-        return result.reshape(u.shape + (self.dimension,))
-
-    def _nurbs(self, u: np.ndarray, derivative: int) -> np.ndarray:
-        assert isinstance(self.spec, NURBSCurveSpec)
-        assert self._nurbs_numerator is not None
-        assert self._nurbs_denominator is not None
-        a0 = np.asarray(self._nurbs_numerator(u), dtype=float)
-        w0 = np.asarray(self._nurbs_denominator(u), dtype=float)
-        if derivative == 0:
-            return a0 / w0[..., None]
-        a1 = np.asarray(self._nurbs_numerator(u, nu=1), dtype=float)
-        w1 = np.asarray(self._nurbs_denominator(u, nu=1), dtype=float)
-        first = a1 / w0[..., None] - a0 * w1[..., None] / w0[..., None] ** 2
-        if derivative == 1:
-            return first
-        if derivative > 2:
-            raise ValueError("NURBS 当前支持到二阶解析导数")
-        a2 = np.asarray(self._nurbs_numerator(u, nu=2), dtype=float)
-        w2 = np.asarray(self._nurbs_denominator(u, nu=2), dtype=float)
-        return (
-            a2 / w0[..., None]
-            - a0 * w2[..., None] / w0[..., None] ** 2
-            - 2.0 * a1 * w1[..., None] / w0[..., None] ** 2
-            + 2.0 * a0 * w1[..., None] ** 2 / w0[..., None] ** 3
-        )
+        return np.asarray(self._bspline(u, nu=derivative), dtype=float)
 
 
-def open_uniform_knots(control_count: int, degree: int) -> list[float]:
+def open_uniform_knots(control_count: int, degree: int = 3) -> list[float]:
+    if degree != 3:
+        raise ValueError("统一内核只使用三次 B-spline")
+    if control_count < degree + 1:
+        raise ValueError("控制点数量不足")
     internal_count = control_count - degree - 1
     internal = (
-        np.linspace(0.0, 1.0, internal_count + 2)[1:-1].tolist() if internal_count > 0 else []
+        np.linspace(0.0, 1.0, internal_count + 2)[1:-1].tolist()
+        if internal_count > 0
+        else []
     )
     return [0.0] * (degree + 1) + internal + [1.0] * (degree + 1)
 
@@ -116,10 +56,19 @@ def unit_tangent_and_normal(
     derivative = evaluator.evaluate(u, 1)
     speed = np.linalg.norm(derivative, axis=1)
     if np.any(speed <= 1e-12):
-        raise ValueError("中弧线存在退化切向")
+        raise ValueError("曲线存在退化切向")
     tangent = derivative / speed[:, None]
     normal = np.column_stack([-tangent[:, 1], tangent[:, 0]])
     return tangent, normal
+
+
+def signed_curvature(evaluator: CurveEvaluator, u: np.ndarray | list[float]) -> np.ndarray:
+    first = evaluator.evaluate(u, 1)
+    second = evaluator.evaluate(u, 2)
+    speed = np.linalg.norm(first, axis=1)
+    if np.any(speed <= 1e-12):
+        raise ValueError("曲线存在退化切向")
+    return (first[:, 0] * second[:, 1] - first[:, 1] * second[:, 0]) / speed**3
 
 
 def angle_between_lines(first: np.ndarray, second: np.ndarray) -> float:

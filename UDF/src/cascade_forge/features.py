@@ -116,16 +116,10 @@ def _extract_features_v2(geometry: AirfoilGeometryV2) -> GeometryFeaturesV2:
     handedness_sign = 1.0 if geometry.spec.intent.handedness.value == "right" else -1.0
     inlet = handedness_sign * geometry.spec.intent.inlet_metal_angle_deg
     outlet = handedness_sign * geometry.spec.intent.outlet_metal_angle_deg
-    leading_arc = np.asarray(geometry.leading_edge_arc, dtype=float)
-    trailing_arc = np.asarray(geometry.trailing_edge_arc, dtype=float)
-    leading_curvature, _ = curve_curvature(leading_arc)
-    trailing_curvature, _ = curve_curvature(trailing_arc)
     outline = np.vstack([suction, pressure[-2:0:-1]])
     return GeometryFeaturesV2(
         geometry_id=geometry.geometry_id,
         intent_id=geometry.intent_id,
-        camber_family=geometry.spec.camber_family,
-        thickness_family=geometry.spec.thickness_family,
         inlet_metal_angle_deg=inlet,
         outlet_metal_angle_deg=outlet,
         turning_angle_deg=inlet - outlet,
@@ -136,14 +130,17 @@ def _extract_features_v2(geometry: AirfoilGeometryV2) -> GeometryFeaturesV2:
         max_camber_x_ratio=float(camber[camber_index, 0]),
         leading_edge_radius_ratio=geometry.edge_metrics["leading_edge_radius_ratio"],
         trailing_edge_radius_ratio=geometry.edge_metrics["trailing_edge_radius_ratio"],
-        trailing_edge_half_wedge_deg=geometry.spec.edge.trailing_edge_half_wedge_deg,
         suction_max_abs_curvature=interior_max(suction_curvature),
         pressure_max_abs_curvature=interior_max(pressure_curvature),
         max_abs_curvature_gradient=max(
             interior_max(suction_gradient), interior_max(pressure_gradient)
         ),
-        leading_edge_max_abs_curvature=float(np.max(np.abs(leading_curvature))),
-        trailing_edge_max_abs_curvature=float(np.max(np.abs(trailing_curvature))),
+        leading_edge_max_abs_curvature=float(
+            1.0 / geometry.edge_metrics["leading_edge_radius_ratio"]
+        ),
+        trailing_edge_max_abs_curvature=float(
+            1.0 / geometry.edge_metrics["trailing_edge_radius_ratio"]
+        ),
         signed_area=_signed_area(suction, pressure),
         full_outline_self_intersects=_polyline_self_intersects(outline, closed=True),
     )
