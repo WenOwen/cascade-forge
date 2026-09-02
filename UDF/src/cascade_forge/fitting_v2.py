@@ -445,7 +445,6 @@ def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2,
     sign = 1.0 if features.inlet_metal_angle_deg >= 0.0 else -1.0
     inlet = float(np.clip(sign * features.inlet_metal_angle_deg, -84.0, 84.0))
     outlet = float(np.clip(sign * features.outlet_metal_angle_deg, -84.0, 84.0))
-    turning = float(np.clip(inlet - outlet, -168.0, 168.0))
     stagger = float(np.clip(sign * features.stagger_deg, -84.0, 84.0))
     tmax = float(np.clip(features.max_thickness_ratio, 0.03, 0.18))
     xt = float(np.clip(features.max_thickness_x_ratio, 0.20, 0.65))
@@ -463,7 +462,7 @@ def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2,
     return (
         GeometryIntentV2(
             inlet_metal_angle_deg=inlet,
-            turning_angle_deg=turning,
+            outlet_metal_angle_deg=outlet,
             stagger_deg=stagger,
             max_thickness_ratio=tmax,
             max_thickness_x_ratio=xt,
@@ -483,7 +482,7 @@ def _intent_from_design(values: np.ndarray, base: GeometryIntentV2) -> GeometryI
     return base.model_copy(
         update={
             "inlet_metal_angle_deg": inlet,
-            "turning_angle_deg": inlet - outlet,
+            "outlet_metal_angle_deg": outlet,
             "camber_le_tangent_ratio": float(values[2]),
             "camber_te_tangent_ratio": float(values[3]),
             "leading_edge_radius_ratio": float(values[4]),

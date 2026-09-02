@@ -22,7 +22,7 @@ def test_cli_v2_generate_export_and_audit_dispatch(tmp_path, monkeypatch) -> Non
             "--output",
             str(dataset),
             "--dataset-version",
-            "2.0.0",
+            "2.1.0",
             "--target-valid",
             "2",
             "--workers",
@@ -31,7 +31,7 @@ def test_cli_v2_generate_export_and_audit_dispatch(tmp_path, monkeypatch) -> Non
     )
     assert generated.exit_code == 0, generated.stdout
     manifest = json.loads((dataset / "dataset_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == "2.0.0"
+    assert manifest["schema_version"] == "2.1.0"
     assert manifest["generated_valid"] == 2
 
     geometry_id = next(iter(DatasetStoreV2(dataset).geometry_ids()))
@@ -59,7 +59,7 @@ def test_cli_workspace_import_export(tmp_path) -> None:
         GeometrySpecV2(
             intent=GeometryIntentV2(
                 inlet_metal_angle_deg=55,
-                turning_angle_deg=25,
+                outlet_metal_angle_deg=30,
                 max_thickness_ratio=0.1,
                 max_thickness_x_ratio=0.42,
                 leading_edge_radius_ratio=0.008,

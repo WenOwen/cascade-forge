@@ -39,7 +39,7 @@ def _signed_area(suction: np.ndarray, pressure: np.ndarray) -> float:
 def extract_features(
     geometry: AirfoilGeometry | AirfoilGeometryV2,
 ) -> GeometryFeatures | GeometryFeaturesV2:
-    if getattr(geometry, "schema_version", None) == "2.0.0":
+    if getattr(geometry, "schema_version", None) in {"2.0.0", "2.1.0"}:
         return _extract_features_v2(geometry)
     return _extract_features_v1(geometry)
 
@@ -114,15 +114,26 @@ def _extract_features_v2(geometry: AirfoilGeometryV2) -> GeometryFeaturesV2:
         return float(np.max(np.abs(values[margin:-margin])))
 
     handedness_sign = 1.0 if geometry.spec.intent.handedness.value == "right" else -1.0
-    inlet = handedness_sign * geometry.spec.intent.inlet_metal_angle_deg
-    outlet = handedness_sign * geometry.spec.intent.outlet_metal_angle_deg
+    intent = geometry.spec.intent
+    inlet_axial = handedness_sign * intent.inlet_metal_angle_axial_deg
+    outlet_axial = handedness_sign * intent.outlet_metal_angle_axial_deg
+    inlet_tangential = 90.0 - inlet_axial
+    outlet_tangential = 90.0 - outlet_axial
+    inlet_local = handedness_sign * intent.inlet_local_angle_deg
+    outlet_local = handedness_sign * intent.outlet_local_angle_deg
     outline = np.vstack([suction, pressure[-2:0:-1]])
     return GeometryFeaturesV2(
         geometry_id=geometry.geometry_id,
         intent_id=geometry.intent_id,
-        inlet_metal_angle_deg=inlet,
-        outlet_metal_angle_deg=outlet,
-        turning_angle_deg=inlet - outlet,
+        inlet_metal_angle_deg=inlet_axial,
+        outlet_metal_angle_deg=outlet_axial,
+        inlet_metal_angle_axial_deg=inlet_axial,
+        outlet_metal_angle_axial_deg=outlet_axial,
+        inlet_metal_angle_tangential_deg=inlet_tangential,
+        outlet_metal_angle_tangential_deg=outlet_tangential,
+        inlet_local_angle_deg=inlet_local,
+        outlet_local_angle_deg=outlet_local,
+        metal_angle_difference_deg=inlet_axial - outlet_axial,
         stagger_deg=geometry.realized_stagger_deg,
         max_thickness_ratio=float(thickness[max_index]),
         max_thickness_x_ratio=float(camber[max_index, 0]),

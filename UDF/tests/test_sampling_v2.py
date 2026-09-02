@@ -12,12 +12,12 @@ from cascade_forge.sampling_v2 import (
 )
 from cascade_forge.storage_v2 import DatasetStoreV2
 
-CONFIG = Path(__file__).parents[1] / "configs" / "geometry-v2.0.0.yaml"
+CONFIG = Path(__file__).parents[1] / "configs" / "geometry-v2.1.0.yaml"
 
 
 def test_unified_v2_config_and_sobol_resume_are_deterministic() -> None:
     config = load_dataset_config_v2(CONFIG)
-    assert config["generator_version"] == "unified-bspline-g2-v2"
+    assert config["generator_version"] == "unified-bspline-g2-v2.1"
     complete = sobol_intents_v2(config, start=0, count=8)
     resumed = sobol_intents_v2(config, start=3, count=5)
     assert complete[3:] == resumed
@@ -36,7 +36,7 @@ def test_small_v2_dataset_is_exact_resumable_and_auditable(
     output = tmp_path / "geometry-v2"
     manifest = generate_dataset_v2(CONFIG, output, target_valid=2, workers=1)
     assert manifest.generated_valid == 2
-    assert manifest.generator_version == "unified-bspline-g2-v2"
+    assert manifest.generator_version == "unified-bspline-g2-v2.1"
     assert DatasetStoreV2(output).count("generated") == 2
     repeated = generate_dataset_v2(CONFIG, output, target_valid=2, workers=1)
     assert repeated.generated_valid == 2

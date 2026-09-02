@@ -111,7 +111,7 @@ def _half_thickness(spec: GeometrySpec, x: np.ndarray) -> np.ndarray:
 
 
 def generate_profile(spec):
-    if getattr(spec, "schema_version", None) == "2.0.0":
+    if getattr(spec, "schema_version", None) in {"2.0.0", "2.1.0"}:
         from .geometry_v2 import generate_profile_v2
 
         return generate_profile_v2(spec)

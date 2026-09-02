@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 import numpy as np
@@ -10,9 +11,27 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .models import Handedness, _round_floats
 
-SCHEMA_VERSION_V2 = "2.0.0"
-GENERATOR_VERSION_V2 = "unified-bspline-g2-v2"
-COORDINATE_CONVENTION_V2 = "closed-chord:x-le-nose-to-te-nose,y-to-suction"
+SCHEMA_VERSION_V2 = "2.1.0"
+GENERATOR_VERSION_V2 = "unified-bspline-g2-v2.1"
+COORDINATE_CONVENTION_V2 = (
+    "intrinsic-chord:x-le-nose-to-te-nose,y-to-suction;"
+    "placement:x-axial,y-positive-tangential"
+)
+
+
+class MetalAngleReference(StrEnum):
+    AXIAL = "axial"
+    TANGENTIAL = "tangential"
+
+
+def axial_to_tangential_angle(angle_deg: float) -> float:
+    """BladeGen-compatible complementary beta representation."""
+
+    return 90.0 - angle_deg
+
+
+def tangential_to_axial_angle(angle_deg: float) -> float:
+    return 90.0 - angle_deg
 
 
 class BSplineCurveSpec(BaseModel):
@@ -39,8 +58,9 @@ class GeometryIntentV2(BaseModel):
     """基础模式工程变量；显式 B-spline 才是 Geometry ID 的真值。"""
 
     model_config = ConfigDict(frozen=True)
-    inlet_metal_angle_deg: float = Field(ge=-84.0, le=84.0)
-    turning_angle_deg: float = Field(ge=-168.0, le=168.0)
+    inlet_metal_angle_deg: float = Field(ge=-84.0, le=174.0)
+    outlet_metal_angle_deg: float = Field(ge=-84.0, le=174.0)
+    metal_angle_reference: MetalAngleReference = MetalAngleReference.AXIAL
     stagger_deg: float = Field(default=42.0, ge=-84.0, le=84.0)
     camber_le_tangent_ratio: float = Field(default=0.33, ge=0.03, le=1.2)
     camber_te_tangent_ratio: float = Field(default=0.33, ge=0.03, le=1.2)
@@ -54,28 +74,70 @@ class GeometryIntentV2(BaseModel):
 
     @model_validator(mode="after")
     def check_geometry_domain(self) -> GeometryIntentV2:
-        if not -84.0 <= self.outlet_metal_angle_deg <= 84.0:
-            raise ValueError("出口金属角必须位于 [-84, 84] deg")
+        axial_angles = (self.inlet_metal_angle_axial_deg, self.outlet_metal_angle_axial_deg)
+        if any(not -84.0 <= angle <= 84.0 for angle in axial_angles):
+            raise ValueError("轴向参考的进口和出口金属角必须位于 [-84, 84] deg")
         if 2 * self.leading_edge_radius_ratio >= self.max_thickness_ratio:
             raise ValueError("前缘直径必须小于最大厚度")
         if 2 * self.trailing_edge_radius_ratio >= self.max_thickness_ratio:
             raise ValueError("尾缘直径必须小于最大厚度")
         local_angles = (
-            self.inlet_metal_angle_deg - self.stagger_deg,
-            self.outlet_metal_angle_deg - self.stagger_deg,
+            self.inlet_metal_angle_axial_deg - self.stagger_deg,
+            self.outlet_metal_angle_axial_deg - self.stagger_deg,
         )
         if any(abs(angle) >= 85.0 for angle in local_angles):
             raise ValueError("金属角相对安装角必须位于 (-85, 85) deg")
         return self
 
     @property
-    def outlet_metal_angle_deg(self) -> float:
-        return self.inlet_metal_angle_deg - self.turning_angle_deg
+    def inlet_metal_angle_axial_deg(self) -> float:
+        if self.metal_angle_reference == MetalAngleReference.AXIAL:
+            return self.inlet_metal_angle_deg
+        return tangential_to_axial_angle(self.inlet_metal_angle_deg)
+
+    @property
+    def outlet_metal_angle_axial_deg(self) -> float:
+        if self.metal_angle_reference == MetalAngleReference.AXIAL:
+            return self.outlet_metal_angle_deg
+        return tangential_to_axial_angle(self.outlet_metal_angle_deg)
+
+    @property
+    def inlet_metal_angle_tangential_deg(self) -> float:
+        return axial_to_tangential_angle(self.inlet_metal_angle_axial_deg)
+
+    @property
+    def outlet_metal_angle_tangential_deg(self) -> float:
+        return axial_to_tangential_angle(self.outlet_metal_angle_axial_deg)
+
+    @property
+    def inlet_local_angle_deg(self) -> float:
+        return self.inlet_metal_angle_axial_deg - self.stagger_deg
+
+    @property
+    def outlet_local_angle_deg(self) -> float:
+        return self.outlet_metal_angle_axial_deg - self.stagger_deg
+
+    @property
+    def metal_angle_difference_deg(self) -> float:
+        return self.inlet_metal_angle_axial_deg - self.outlet_metal_angle_axial_deg
 
     @property
     def intent_id(self) -> str:
+        # Reference and stagger are presentation/placement.  The intent identity is
+        # the intrinsic section shape in the chord frame.
+        payload_data = self.model_dump(
+            mode="json", exclude={"metal_angle_reference", "stagger_deg"}
+        )
+        payload_data.pop("inlet_metal_angle_deg")
+        payload_data.pop("outlet_metal_angle_deg")
+        payload_data.update(
+            {
+                "inlet_local_angle_deg": self.inlet_local_angle_deg,
+                "outlet_local_angle_deg": self.outlet_local_angle_deg,
+            }
+        )
         payload = json.dumps(
-            _round_floats(self.model_dump(mode="json")),
+            _round_floats(payload_data),
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
@@ -84,8 +146,8 @@ class GeometryIntentV2(BaseModel):
 
 class GeometrySpecV2(BaseModel):
     model_config = ConfigDict(frozen=True)
-    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
-    generator_version: Literal["unified-bspline-g2-v2"] = GENERATOR_VERSION_V2
+    schema_version: Literal["2.1.0"] = SCHEMA_VERSION_V2
+    generator_version: Literal["unified-bspline-g2-v2.1"] = GENERATOR_VERSION_V2
     coordinate_convention: str = COORDINATE_CONVENTION_V2
     authoring_mode: Literal["basic", "advanced"] = "basic"
     intent: GeometryIntentV2
@@ -159,7 +221,7 @@ class GeometrySpecV2(BaseModel):
 
 class AirfoilGeometryV2(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    schema_version: Literal["2.1.0"] = SCHEMA_VERSION_V2
     geometry_id: str
     intent_id: str
     spec: GeometrySpecV2
@@ -188,13 +250,19 @@ class AirfoilGeometryV2(BaseModel):
 
 
 class GeometryFeaturesV2(BaseModel):
-    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    schema_version: Literal["2.1.0"] = SCHEMA_VERSION_V2
     geometry_id: str
     intent_id: str
     kernel: Literal["unified_bspline_g2"] = "unified_bspline_g2"
     inlet_metal_angle_deg: float
     outlet_metal_angle_deg: float
-    turning_angle_deg: float
+    inlet_metal_angle_axial_deg: float
+    outlet_metal_angle_axial_deg: float
+    inlet_metal_angle_tangential_deg: float
+    outlet_metal_angle_tangential_deg: float
+    inlet_local_angle_deg: float
+    outlet_local_angle_deg: float
+    metal_angle_difference_deg: float
     stagger_deg: float
     max_thickness_ratio: float
     max_thickness_x_ratio: float
@@ -212,7 +280,7 @@ class GeometryFeaturesV2(BaseModel):
 
 
 class AnchorFitRecord(BaseModel):
-    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
+    schema_version: Literal["2.1.0"] = SCHEMA_VERSION_V2
     fit_id: str
     source_anchor_id: str
     geometry_id: str | None = None
@@ -231,9 +299,9 @@ class AnchorFitRecord(BaseModel):
 
 
 class DatasetManifestV2(BaseModel):
-    dataset_name: str = "geometry-v2.0.0"
-    schema_version: Literal["2.0.0"] = SCHEMA_VERSION_V2
-    generator_version: Literal["unified-bspline-g2-v2"] = GENERATOR_VERSION_V2
+    dataset_name: str = "geometry-v2.1.0"
+    schema_version: Literal["2.1.0"] = SCHEMA_VERSION_V2
+    generator_version: Literal["unified-bspline-g2-v2.1"] = GENERATOR_VERSION_V2
     seed: int = 20260901
     target_valid: int
     generated_valid: int

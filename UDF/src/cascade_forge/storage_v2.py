@@ -24,7 +24,7 @@ from .models_v2 import (
 
 
 class DatasetStoreV2:
-    """schema 2.0 的单写者 DuckDB 目录与不可变 Parquet 分区。"""
+    """schema 2.1 的单写者 DuckDB 目录与不可变 Parquet 分区。"""
 
     _guard = threading.Lock()
     _locks: dict[Path, threading.RLock] = {}
@@ -78,8 +78,8 @@ class DatasetStoreV2:
             connection.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations VALUES
-                ('0001-schema-v2', '2.0.0', current_timestamp,
-                 'independent v2 catalog; v1 remains read-only')
+                ('0002-schema-v2.1', '2.1.0', current_timestamp,
+                 'NASA axial metal angles and independent stagger placement')
                 """
             )
         self.refresh_views()

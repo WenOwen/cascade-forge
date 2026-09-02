@@ -21,7 +21,7 @@ def audit_dataset(dataset: str | Path, *, rebuild_sample: int = 128) -> dict[str
 
         if (
             str(json.loads(manifest_path.read_text(encoding="utf-8")).get("schema_version"))
-            == "2.0.0"
+            == "2.1.0"
         ):
             from .audit_v2 import audit_dataset_v2
 

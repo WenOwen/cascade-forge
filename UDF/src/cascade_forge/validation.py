@@ -17,7 +17,7 @@ def validate_profile(
     geometry: AirfoilGeometry | AirfoilGeometryV2,
     cascade_context: CascadeContext | None = None,
 ) -> ValidationReport:
-    if getattr(geometry, "schema_version", None) == "2.0.0":
+    if getattr(geometry, "schema_version", None) in {"2.0.0", "2.1.0"}:
         from .validation_v2 import validate_profile_v2
 
         return validate_profile_v2(geometry, cascade_context)

@@ -22,7 +22,7 @@ from .workspace import WorkspaceStore
 app = typer.Typer(help="Cascade Forge 叶型几何数据库")
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PACKAGE_ROOT / "configs" / "geometry-v1.0.0.yaml"
-DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.0.0.yaml"
+DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.1.0.yaml"
 
 
 @app.command("ingest-anchors")
@@ -56,10 +56,10 @@ def generate_command(
 
     selected_config = (
         DEFAULT_CONFIG_V2
-        if dataset_version == "2.0.0" and config.resolve() == DEFAULT_CONFIG.resolve()
+        if dataset_version == "2.1.0" and config.resolve() == DEFAULT_CONFIG.resolve()
         else config
     )
-    if dataset_version == "2.0.0" or "2.0.0" in selected_config.name:
+    if dataset_version == "2.1.0" or "2.1.0" in selected_config.name:
         manifest = generate_dataset_v2(
             selected_config,
             output,
@@ -190,7 +190,7 @@ def _open_store(dataset: Path):
     manifest = dataset / "dataset_manifest.json"
     if manifest.exists():
         schema = json.loads(manifest.read_text(encoding="utf-8")).get("schema_version")
-        if str(schema) == "2.0.0":
+        if str(schema) == "2.1.0":
             return DatasetStoreV2(dataset)
     if (dataset / "tables" / "geometries").exists() and any(
         (dataset / "tables" / "geometries").glob("*.parquet")

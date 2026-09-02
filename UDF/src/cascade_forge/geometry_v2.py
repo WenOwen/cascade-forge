@@ -40,8 +40,8 @@ def resolve_geometry_spec(spec: GeometrySpecV2) -> GeometrySpecV2:
 
     intent = spec.intent
     sign = 1.0 if intent.handedness == Handedness.RIGHT else -1.0
-    inlet_local = math.radians(sign * (intent.inlet_metal_angle_deg - intent.stagger_deg))
-    outlet_local = math.radians(sign * (intent.outlet_metal_angle_deg - intent.stagger_deg))
+    inlet_local = math.radians(sign * intent.inlet_local_angle_deg)
+    outlet_local = math.radians(sign * intent.outlet_local_angle_deg)
     camber = BSplineCurveSpec(
         control_points=[
             [0.0, 0.0],

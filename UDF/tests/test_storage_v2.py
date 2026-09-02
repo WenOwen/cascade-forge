@@ -15,7 +15,7 @@ def _geometry():
         GeometrySpecV2(
             intent=GeometryIntentV2(
                 inlet_metal_angle_deg=55.0,
-                turning_angle_deg=25.0,
+                outlet_metal_angle_deg=30.0,
                 stagger_deg=42.0,
                 max_thickness_ratio=0.1,
                 max_thickness_x_ratio=0.42,

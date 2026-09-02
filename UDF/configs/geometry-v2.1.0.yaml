@@ -1,14 +1,14 @@
-dataset_name: geometry-v2.0.0
-schema_version: "2.0.0"
-generator_version: unified-bspline-g2-v2
+dataset_name: geometry-v2.1.0
+schema_version: "2.1.0"
+generator_version: unified-bspline-g2-v2.1
 seed: 20260901
 target_valid: 20000
 points_per_side: 201
 batch_size: 256
-sampling_policy: unified-bspline-g2
+sampling_policy: unified-bspline-g2-axial-metal-angles
 parameters:
   inlet_metal_angle_deg: [20.0, 75.0]
-  turning_angle_deg: [0.0, 65.0]
+  outlet_metal_angle_deg: [-20.0, 65.0]
   stagger_deg: [15.0, 65.0]
   camber_le_tangent_ratio: [0.15, 0.65]
   camber_te_tangent_ratio: [0.15, 0.65]
@@ -19,7 +19,7 @@ parameters:
   fore_shape_factor: [0.65, 1.45]
   aft_shape_factor: [0.65, 1.45]
 constraints:
-  outlet_metal_angle_deg: [-20.0, 65.0]
+  local_metal_angle_deg: [-84.0, 84.0]
   max_abs_camber_ratio: 0.42
   max_abs_curvature: 350.0
   max_curvature_gradient: 40000.0

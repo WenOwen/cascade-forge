@@ -22,7 +22,7 @@ from .validation_v2 import validate_profile_v2
 
 INTENT_PARAMETER_ORDER = [
     "inlet_metal_angle_deg",
-    "turning_angle_deg",
+    "outlet_metal_angle_deg",
     "stagger_deg",
     "camber_le_tangent_ratio",
     "camber_te_tangent_ratio",
@@ -37,10 +37,10 @@ INTENT_PARAMETER_ORDER = [
 
 def load_dataset_config_v2(path: str | Path) -> dict[str, Any]:
     config = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    if str(config.get("schema_version")) != "2.0.0":
-        raise ValueError("v2 生成器只接受 schema_version 2.0.0 配置")
-    if str(config.get("generator_version")) != "unified-bspline-g2-v2":
-        raise ValueError("配置不是统一 B-spline/G2 v2 内核")
+    if str(config.get("schema_version")) != "2.1.0":
+        raise ValueError("v2 生成器只接受 schema_version 2.1.0 配置")
+    if str(config.get("generator_version")) != "unified-bspline-g2-v2.1":
+        raise ValueError("配置不是统一 B-spline/G2 v2.1 内核")
     missing = [name for name in INTENT_PARAMETER_ORDER if name not in config.get("parameters", {})]
     if missing:
         raise ValueError(f"v2 配置缺少参数范围: {', '.join(missing)}")
@@ -301,8 +301,8 @@ def _load_state(path: Path, store: DatasetStoreV2) -> dict[str, int]:
 
 def _write_state(path: Path, accepted: int, proposal_cursor: int, **extra: Any) -> None:
     payload = {
-        "schema_version": "2.0.0",
-        "generator_version": "unified-bspline-g2-v2",
+        "schema_version": "2.1.0",
+        "generator_version": "unified-bspline-g2-v2.1",
         "accepted": accepted,
         "next_proposal_index": proposal_cursor,
         **extra,

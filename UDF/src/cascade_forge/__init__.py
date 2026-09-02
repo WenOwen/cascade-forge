@@ -18,6 +18,7 @@ from .models_v2 import (
     GeometryFeaturesV2,
     GeometryIntentV2,
     GeometrySpecV2,
+    MetalAngleReference,
 )
 from .sampling import generate_dataset
 from .storage_v2 import DatasetStoreV2
@@ -44,6 +45,7 @@ __all__ = [
     "GeometryIntentV2",
     "GeometryFeaturesV2",
     "GeometrySpecV2",
+    "MetalAngleReference",
 ]
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

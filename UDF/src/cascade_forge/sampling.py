@@ -62,7 +62,7 @@ def generate_dataset(
 ) -> DatasetManifest:
     config_path = Path(config_path).resolve()
     config = load_dataset_config(config_path)
-    if str(config.get("schema_version")) == "2.0.0":
+    if str(config.get("schema_version")) == "2.1.0":
         from .sampling_v2 import generate_dataset_v2
 
         return generate_dataset_v2(
