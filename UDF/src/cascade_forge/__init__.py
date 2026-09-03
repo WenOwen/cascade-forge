@@ -2,6 +2,7 @@
 
 from .blade3d import build_blade
 from .features import extract_features
+from .fitting_naca65 import evaluate_reference_fit, fit_reference_geometry
 from .fitting_v2 import (
     fit_anchor_geometry,
     fit_anchors_to_dataset,
@@ -10,6 +11,15 @@ from .fitting_v2 import (
 from .geometry2d import generate_profile
 from .geomturbo import export_geomturbo
 from .legacy import ingest_legacy_anchors
+from .models_naca65 import (
+    NACA65BenchmarkConfig,
+    NACA65BenchmarkManifest,
+    NACA65Family,
+    NACA65FitReport,
+    NACA65Geometry,
+    NACA65InputMode,
+    NACA65Spec,
+)
 from .models_v2 import (
     AirfoilGeometryV2,
     AnchorFitRecord,
@@ -19,15 +29,6 @@ from .models_v2 import (
     GeometryIntentV2,
     GeometrySpecV2,
     MetalAngleReference,
-)
-from .models_naca65 import (
-    NACA65BenchmarkConfig,
-    NACA65BenchmarkManifest,
-    NACA65Family,
-    NACA65FitReport,
-    NACA65Geometry,
-    NACA65InputMode,
-    NACA65Spec,
 )
 from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
@@ -42,6 +43,8 @@ __all__ = [
     "fit_anchor_geometry",
     "fit_anchors_to_dataset",
     "fit_legacy_anchors",
+    "fit_reference_geometry",
+    "evaluate_reference_fit",
     "generate_dataset",
     "generate_profile",
     "ingest_legacy_anchors",

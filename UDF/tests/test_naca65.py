@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from cascade_forge.fitting_naca65 import fit_reference_geometry
 from cascade_forge.models_naca65 import NACA65Family, NACA65InputMode, NACA65Spec
 from cascade_forge.naca65 import generate_naca65, parse_naca65_designation
 
@@ -101,3 +102,19 @@ def test_normalized_surfaces_share_endpoints_and_resolution() -> None:
     assert suction.shape == pressure.shape == (201, 2)
     assert np.allclose(suction[[0, -1]], pressure[[0, -1]], atol=1e-14)
     assert np.isclose(np.max(geometry.thickness), 0.10, atol=5e-4)
+
+
+def test_bspline_reference_fit_is_deterministic_and_reports_surface_error() -> None:
+    reference = generate_naca65("65-810")
+    first_report, first_geometry = fit_reference_geometry(
+        reference, max_outer_iterations=2, max_design_evaluations=20
+    )
+    second_report, second_geometry = fit_reference_geometry(
+        reference, max_outer_iterations=2, max_design_evaluations=20
+    )
+    assert first_geometry.geometry_id == second_geometry.geometry_id
+    assert first_report.fit_id == second_report.fit_id
+    assert first_report.rms_distance_ratio == second_report.rms_distance_ratio
+    assert len(first_report.suction_signed_normal_error) == 201
+    assert len(first_report.pressure_signed_normal_error) == 201
+    assert first_report.explicit_spec is not None
