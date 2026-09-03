@@ -93,3 +93,13 @@ def test_cli_workspace_import_export(tmp_path) -> None:
     )
     assert imported.exit_code == 0, imported.stdout
     assert len(WorkspaceStore(target_workspace).list_designs()) == 1
+
+
+def test_empty_v21_directory_dispatches_to_v2_audit(tmp_path) -> None:
+    runner = CliRunner()
+    dataset = tmp_path / "geometry-v2.1.0"
+    DatasetStoreV2(dataset)
+    result = runner.invoke(app, ["audit", "--dataset", str(dataset)])
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["checks"] == {"non_empty": False}

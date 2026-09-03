@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from .audit import audit_dataset
+from .audit_v2 import audit_dataset_v2
 from .blade3d import build_blade
 from .fitting_v2 import fit_anchors_to_dataset
 from .geomturbo import export_geomturbo
@@ -90,7 +91,11 @@ def fit_anchors_command(
 
 @app.command("audit")
 def audit_command(dataset: Annotated[Path, typer.Option(exists=True, file_okay=False)]) -> None:
-    summary = audit_dataset(dataset)
+    summary = (
+        audit_dataset_v2(dataset)
+        if isinstance(_open_store(dataset), DatasetStoreV2)
+        else audit_dataset(dataset)
+    )
     typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
     if not summary["valid"]:
         raise typer.Exit(code=1)
@@ -187,6 +192,8 @@ def workspace_import_command(
 
 
 def _open_store(dataset: Path):
+    if dataset.name.startswith("geometry-v2."):
+        return DatasetStoreV2(dataset)
     manifest = dataset / "dataset_manifest.json"
     if manifest.exists():
         schema = json.loads(manifest.read_text(encoding="utf-8")).get("schema_version")
