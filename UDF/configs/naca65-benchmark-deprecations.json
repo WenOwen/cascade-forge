@@ -1,0 +1,14 @@
+{
+  "deprecated_benchmark": "naca65-benchmark-1.0.0",
+  "status": "invalid_for_mean_line_thickness_decomposition",
+  "date": "2026-09-03",
+  "replacement": "naca65-benchmark-2.0.0",
+  "reasons": [
+    "Independent SS/PS arc resampling was incorrectly used to define the mean line.",
+    "Independent half-thickness fields allowed mean-line drift.",
+    "Secondary surface splines did not strictly satisfy the normal-offset contract.",
+    "Nearest-vertex distances introduced a sample-spacing floor in contour metrics."
+  ],
+  "preservation": "Old manifest, Parquet and raw NASA coordinates are retained without overwriting.",
+  "comparison_warning": "Old and new reported RMS use different distance estimators; no direct improvement ratio."
+}
