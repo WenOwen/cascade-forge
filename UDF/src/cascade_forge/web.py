@@ -30,7 +30,7 @@ from .jobs import JobManager
 from .models import CascadeContext, GeometrySpec, SectionSchedule
 from .models_naca65 import NACA65BenchmarkConfig, NACA65Spec
 from .models_v2 import GeometrySpecV2
-from .naca65 import generate_naca65
+from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
 from .sampling_v2 import generate_dataset_v2
 from .storage import DatasetStore
@@ -79,6 +79,10 @@ class NACA65FitRequest(BaseModel):
     spec: NACA65Spec
     max_outer_iterations: int = Field(default=6, ge=1, le=20)
     max_design_evaluations: int = Field(default=80, ge=10, le=500)
+
+
+class NACA65PresetRequest(BaseModel):
+    designation: str = Field(min_length=5, max_length=40)
 
 
 def create_app(
@@ -183,6 +187,13 @@ def create_app(
             _page_context("anchors", store_v2, workspace),
         )
 
+    @application.get("/naca65", response_class=HTMLResponse)
+    def naca65_page(request: Request) -> HTMLResponse:
+        context = _page_context("naca65", store_v2, workspace)
+        context["naca65_count"] = naca65_store.count()
+        context["naca65_manifest"] = naca65_store.latest_manifest()
+        return templates.TemplateResponse(request, "pages/naca65.html", context)
+
     @application.get("/blade", response_class=HTMLResponse)
     def blade_page(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
@@ -279,6 +290,14 @@ def create_app(
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(422, str(exc)) from exc
         return {"reference": reference.model_dump(mode="json")}
+
+    @application.post("/api/v2/naca65/presets/parse")
+    def parse_naca65_preset(body: NACA65PresetRequest) -> dict[str, Any]:
+        try:
+            spec = parse_naca65_designation(body.designation)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"spec": spec.model_dump(mode="json")}
 
     @application.post("/api/v2/naca65/fit")
     def fit_naca65_api(body: NACA65FitRequest) -> dict[str, Any]:

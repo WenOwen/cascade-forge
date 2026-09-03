@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% macro slider(name, label, minimum, maximum, step, value, help='') -%}
+<div class="parameter-control" data-naca-parameter="{{ name }}">
+  <div class="parameter-heading">
+    <label for="naca-{{ name }}-number">{{ label }}</label>
+    {% if help %}<button class="help-tip" type="button" aria-label="参数说明" data-tooltip="{{ help }}">?</button>{% endif %}
+    <input id="naca-{{ name }}-number" type="number" data-number name="{{ name }}" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ value }}">
+  </div>
+  <div class="range-row"><span>{{ minimum }}</span><input type="range" data-range aria-label="{{ label }}滑动条" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ value }}"><span>{{ maximum }}</span></div>
+</div>
+{%- endmacro %}
+{% block title %}NACA 65 实验室 · Cascade Forge{% endblock %}
+{% block page_title %}NACA 65 实验室{% endblock %}
+{% block extra_scripts %}<script src="/static/naca65.js?v=1.0" defer></script>{% endblock %}
+{% block toolbar_actions %}<button class="button" type="button" data-naca-refresh>刷新基准</button><button class="button primary" type="button" data-naca-run-benchmark>运行 / 恢复 36 型</button>{% endblock %}
+{% block content %}
+<div class="naca-lab" data-naca-root data-existing-count="{{ naca65_count }}">
+  <section class="naca-workbench">
+    <aside class="surface-card naca-inspector">
+      <p class="eyebrow">NASA SIXSERIES · 1974</p>
+      <h2>原生截面</h2>
+      <p class="field-help">共形映射厚度 · a 型中弧线 · 沿法线叠加。原始坐标与 OpenVSP 兼容闭合坐标同时保留。</p>
+      <form data-naca-form class="inspector-form">
+        <fieldset>
+          <legend>输入方式</legend>
+          <div class="segmented" role="group" aria-label="NACA 输入方式"><button class="active" type="button" data-naca-mode="general">通用参数</button><button type="button" data-naca-mode="preset">压气机编号</button></div>
+          <label data-general-field>翼型族<select name="family"><option value="65">NACA 65</option><option value="65A">NACA 65A（修型）</option></select></label>
+          <label data-preset-field hidden>标准编号<input name="preset" value="65-810" placeholder="65-010 / 65-(12)10"><small>预设按标准 65 系、a=1.0 解析；不会伪造 65A 编号。</small></label>
+        </fieldset>
+        <fieldset data-general-field><legend>原生参数</legend>
+          {{ slider('thickness_ratio', '最大厚度 t/c', 0.03, 0.18, 0.005, 0.10, 'sixseries 共形映射厚度分布的目标最大厚度比。') }}
+          {{ slider('design_lift_coefficient', '设计升力系数 Clᵢ', 0, 2, 0.1, 0.8, '控制 NACA a 型中弧线的设计升力系数；它不是当前工况升力系数。') }}
+          {{ slider('loading_parameter_a', '载荷参数 a', 0, 1, 0.05, 0.8, '控制弦向均匀载荷区间。65A 按原始定义固定为 0.8。') }}
+        </fieldset>
+        <div class="button-row naca-actions"><button class="button" type="button" data-naca-generate>仅生成</button><button class="button primary" type="submit" data-naca-fit>生成并拟合</button></div>
+        <p class="json-error" data-naca-error role="alert"></p>
+      </form>
+      <details><summary>源码与身份</summary><dl class="definition-grid naca-provenance"><dt>参考实现</dt><dd>OpenVSP sixseries</dd><dt>固定 commit</dt><dd><code>51bdec01</code></dd><dt>内核</dt><dd>Python / NumPy</dd><dt>运行时依赖</dt><dd>无 C / Fortran</dd></dl></details>
+    </aside>
+
+    <div class="naca-results">
+      <article class="surface-card canvas-card">
+        <div class="card-heading"><div><p class="eyebrow">NATIVE ↔ UNIFIED B-SPLINE G2</p><h2 data-naca-designation>NACA 65-810</h2></div><div class="button-row"><span class="pill" data-naca-fit-state>等待计算</span><button class="icon-button" type="button" data-naca-reset-view title="重置视图">↺</button></div></div>
+        <div class="chart-frame naca-profile-frame"><div id="naca-profile-chart" class="plotly-chart" data-empty="生成后显示完整轮廓"></div></div>
+        <div class="geometry-meta"><code data-naca-native-id>—</code><code data-naca-geometry-id>—</code></div>
+      </article>
+      <div class="metric-grid compact naca-metrics">
+        <article class="metric-card"><span>全轮廓 RMS</span><strong data-metric="rms">—</strong><small>有效门槛 5×10⁻⁴c</small></article>
+        <article class="metric-card"><span>最大距离</span><strong data-metric="max">—</strong><small>有效门槛 2×10⁻³c</small></article>
+        <article class="metric-card"><span>核心区 RMS</span><strong data-metric="core-rms">—</strong><small>0.02 ≤ x/c ≤ 0.98</small></article>
+        <article class="metric-card"><span>Hausdorff 近似</span><strong data-metric="hausdorff">—</strong><small>双向最近点</small></article>
+      </div>
+      <article class="surface-card"><div class="card-heading"><div><p class="eyebrow">SIGNED NORMAL DEVIATION</p><h2>叶面拟合误差</h2></div><span class="pill" data-naca-status>—</span></div><div id="naca-error-chart" class="plotly-chart naca-error-chart"></div></article>
+      <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span class="mono-value" data-naca-le>—</span></div><div id="naca-le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span class="mono-value" data-naca-te>—</span></div><div id="naca-te-chart" class="plotly-chart edge-chart"></div></article></div>
+      <article class="surface-card"><div class="card-heading"><h2>几何特征偏差</h2><span class="field-help">B-spline − NACA 原生</span></div><div class="table-scroll"><table class="data-table"><thead><tr><th>特征</th><th>偏差</th></tr></thead><tbody data-naca-feature-deltas><tr><td colspan="2" class="empty-state">拟合后显示</td></tr></tbody></table></div></article>
+    </div>
+  </section>
+
+  <section class="surface-card naca-benchmark-card">
+    <div class="card-heading"><div><p class="eyebrow">DETERMINISTIC BENCHMARK</p><h2>36 型拟合矩阵</h2></div><span class="pill" data-naca-job-state>未运行</span></div>
+    <p class="field-help">65：3 个厚度 × 3 个 Clᵢ × 3 个 a；65A：3 个厚度 × 3 个 Clᵢ，a 固定 0.8。失败案例同样保存。</p>
+    <div class="progress-track"><span data-naca-progress style="width: {{ (naca65_count / 36 * 100) if naca65_count < 36 else 100 }}%"></span></div>
+    <div class="metric-grid compact naca-summary"><article class="metric-card"><span>已完成</span><strong data-summary="total">{{ naca65_count }}/36</strong></article><article class="metric-card"><span>有效</span><strong data-summary="valid">—</strong></article><article class="metric-card"><span>警告</span><strong data-summary="warning">—</strong></article><article class="metric-card"><span>拒绝 / 失败</span><strong data-summary="rejected">—</strong></article></div>
+    <div class="naca-benchmark-grid"><div><div id="naca-heatmap-chart" class="plotly-chart naca-heatmap-chart"></div></div><div class="table-scroll naca-case-table"><table class="data-table"><thead><tr><th>型号</th><th>族</th><th>t/c</th><th>Clᵢ</th><th>a</th><th>状态</th><th>RMS</th><th>最大误差</th><th>导出</th></tr></thead><tbody data-naca-cases><tr><td colspan="9" class="empty-state">尚无基准结果</td></tr></tbody></table></div></div>
+  </section>
+</div>
+{% endblock %}

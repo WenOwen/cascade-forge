@@ -29,6 +29,18 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
             naca65_dataset_root=benchmark_root,
         )
     ) as client:
+        page = client.get("/naca65")
+        assert page.status_code == 200
+        assert "NACA 65 实验室" in page.text
+        assert "naca65.js" in page.text
+
+        parsed = client.post(
+            "/api/v2/naca65/presets/parse", json={"designation": "65-(12)10"}
+        )
+        assert parsed.status_code == 200
+        assert parsed.json()["spec"]["design_lift_coefficient"] == 1.2
+        assert parsed.json()["spec"]["thickness_ratio"] == 0.1
+
         spec = NACA65Spec().model_dump(mode="json")
         generated = client.post("/api/v2/naca65/generate", json=spec)
         assert generated.status_code == 200

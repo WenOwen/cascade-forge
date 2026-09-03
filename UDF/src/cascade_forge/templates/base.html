@@ -10,6 +10,7 @@
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
   <script src="/static/app.js?v=2.1-angles" defer></script>
+  {% block extra_scripts %}{% endblock %}
 </head>
 <body data-page="{{ page|default('overview') }}">
   <button class="sidebar-toggle" type="button" aria-label="打开导航" data-sidebar-toggle>☰</button>
@@ -20,6 +21,7 @@
       ('overview','/','总览','⌂'), ('studio','/studio','叶型工作室','◇'),
       ('database','/database','数据库','▦'), ('compare','/compare','叶型比较','⇄'),
       ('cascade','/cascade','叶栅检查','≋'), ('anchors','/anchors','NASA 锚点','◎'),
+      ('naca65','/naca65','NACA 65 实验室','◉'),
       ('blade','/blade','三维叶片','△'), ('datasets','/datasets','数据集与批次','▤'),
       ('audit','/audit','审计','✓'), ('jobs','/jobs','Jobs 与制品','◷')
     ] %}

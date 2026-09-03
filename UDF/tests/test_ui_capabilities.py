@@ -27,6 +27,10 @@ def test_every_public_workflow_has_a_ui_api_mapping(tmp_path) -> None:
         "generate_dataset",
         "audit_dataset",
         "jobs_and_artifacts",
+        "generate_naca65",
+        "fit_naca65",
+        "benchmark_naca65",
+        "export_naca65",
     }
     assert set(mapping["capabilities"]) == expected
     with TestClient(
@@ -55,6 +59,7 @@ def test_workbench_has_no_external_cdn_and_exposes_all_pages() -> None:
         "叶型比较",
         "叶栅检查",
         "NASA 锚点",
+        "NACA 65 实验室",
         "三维叶片",
         "数据集与批次",
         "审计",

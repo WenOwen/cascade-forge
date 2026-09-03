@@ -201,6 +201,26 @@ pre { max-height: 420px; overflow: auto; padding: 14px; border-radius: 9px; back
 .plot { width: 100%; min-width: 0; height: 360px; }
 .empty-state { padding: 50px; color: var(--muted); text-align: center; }
 
+.naca-workbench { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+.naca-inspector { position: sticky; top: 92px; max-height: calc(100vh - 112px); overflow: auto; }
+.naca-inspector small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.45; }
+.naca-results { min-width: 0; }
+.naca-profile-frame { height: clamp(380px, 44vw, 590px); }
+.naca-metrics { margin-top: 18px; }
+.naca-error-chart { height: 320px; }
+.naca-actions { margin-top: 16px; }
+.naca-provenance dd { min-width: 0; overflow-wrap: anywhere; }
+.naca-provenance code { font-size: 11px; }
+.naca-benchmark-card { margin-top: 18px; }
+.naca-benchmark-grid { display: grid; grid-template-columns: minmax(360px, .85fr) minmax(0, 1.15fr); gap: 18px; align-items: start; }
+.naca-heatmap-chart { height: 430px; }
+.naca-case-table { max-height: 500px; overflow: auto; }
+.table-link { padding: 0; border: 0; background: transparent; color: var(--blue); cursor: pointer; font-weight: 650; text-align: left; }
+.table-link:hover { text-decoration: underline; }
+.export-links { display: flex; gap: 7px; white-space: nowrap; }
+.export-links a { color: var(--blue); font-size: 11px; text-decoration: none; }
+.export-links a:hover { text-decoration: underline; }
+
 dialog { max-width: min(92vw, 720px); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 18px 60px rgb(0 0 0 / 20%); }
 dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .dialog-form, .detail-dialog { min-width: min(520px, 88vw); padding: 24px; }
@@ -214,6 +234,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
   .section-row { grid-template-columns: 22px repeat(3, 1fr) minmax(160px, 2fr) 34px; }
   .section-row label:nth-of-type(n+5) { grid-row: 2; }
   .audit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .naca-benchmark-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -225,8 +246,8 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
   body.sidebar-open .sidebar-scrim { display: block; }
   .workspace-shell { width: 100%; margin-left: 0; }
   .toolbar { padding-left: 62px; }
-  .studio-layout, .overview-grid, .two-column { grid-template-columns: 1fr; }
-  .inspector { position: static; max-height: none; }
+  .studio-layout, .naca-workbench, .overview-grid, .two-column { grid-template-columns: 1fr; }
+  .inspector, .naca-inspector { position: static; max-height: none; }
   .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .edge-grid { grid-template-columns: 1fr; }
 }
@@ -240,6 +261,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
   .metric-grid, .action-grid, .filter-bar, .threshold-grid, .audit-grid, .init-steps { grid-template-columns: 1fr; }
   .surface-card { padding: 15px; border-radius: 12px; }
   .profile-frame { height: 360px; }
+  .naca-profile-frame { height: 340px; }
   .large-chart { height: 430px; }
   .field-pair { grid-template-columns: 1fr; }
   .inline-form { align-items: stretch; flex-direction: column; }
@@ -247,4 +269,5 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
   .section-row label { grid-row: auto !important; }
   .section-row label:nth-of-type(4) { grid-column: 2 / 4; }
   .dialog-form, .detail-dialog { min-width: 88vw; }
+  .export-links { flex-wrap: wrap; }
 }

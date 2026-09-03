@@ -49,3 +49,19 @@ capabilities:
   jobs_and_artifacts:
     ui: /jobs
     api: GET /api/v2/jobs
+  generate_naca65:
+    ui: /naca65
+    api: POST /api/v2/naca65/generate
+    cli: naca65 generate
+  fit_naca65:
+    ui: /naca65
+    api: POST /api/v2/naca65/fit
+    cli: naca65 fit
+  benchmark_naca65:
+    ui: /naca65
+    api: POST /api/v2/naca65/benchmarks
+    cli: naca65 benchmark
+  export_naca65:
+    ui: /naca65
+    api: GET /api/v2/naca65/cases/{fit_id}/export
+    cli: naca65 export

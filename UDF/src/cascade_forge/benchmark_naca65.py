@@ -51,6 +51,12 @@ def run_naca65_benchmark(
     progress: Callable[[dict[str, int]], None] | None = None,
 ) -> NACA65BenchmarkManifest:
     store = NACA65BenchmarkStore(destination)
+    previous_manifest = store.latest_manifest()
+    if previous_manifest is not None and previous_manifest.config != config:
+        raise ValueError(
+            "目标基准库已由不同的 NACA 65 拟合配置初始化；"
+            "请使用相同配置恢复，或选择新的版本化目录"
+        )
     specs = benchmark_specs(config)
     if len(specs) != config.case_count:
         raise RuntimeError("NACA 65 基准矩阵数量与配置不一致")
@@ -120,7 +126,7 @@ def run_naca65_benchmark(
         status_distribution=dict(distribution),
         source_provenance=SOURCE_PROVENANCE,
         files=store.artifact_hashes(),
-        created_at=store.latest_manifest().created_at if store.latest_manifest() else now,
+        created_at=previous_manifest.created_at if previous_manifest else now,
         completed_at=now,
     )
     store.write_manifest(manifest)
