@@ -6,10 +6,10 @@
   <meta name="color-scheme" content="light">
   <title>{% block title %}Cascade Forge{% endblock %}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/app.css?v=2.0-g2">
+  <link rel="stylesheet" href="/static/app.css?v=2.1-angles">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
-  <script src="/static/app.js?v=2.0-g2" defer></script>
+  <script src="/static/app.js?v=2.1-angles" defer></script>
 </head>
 <body data-page="{{ page|default('overview') }}">
   <button class="sidebar-toggle" type="button" aria-label="打开导航" data-sidebar-toggle>☰</button>
@@ -24,7 +24,7 @@
       ('audit','/audit','审计','✓'), ('jobs','/jobs','Jobs 与制品','◷')
     ] %}
     <nav>{% for key, href, label, icon in navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}</nav>
-    <div class="sidebar-footer"><span class="status-dot"></span><span>本地离线</span><small>schema 2.0.0</small></div>
+    <div class="sidebar-footer"><span class="status-dot"></span><span>本地离线</span><small>schema 2.1.0</small></div>
   </aside>
   <main class="workspace-shell">
     <header class="toolbar"><div><p class="toolbar-kicker">CASCADE FORGE</p><h1>{% block page_title %}总览{% endblock %}</h1></div><div class="toolbar-actions">{% block toolbar_actions %}{% endblock %}</div></header>

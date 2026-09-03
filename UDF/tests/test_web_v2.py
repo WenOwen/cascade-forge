@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 from cascade_forge.features import extract_features
@@ -62,7 +63,37 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         payload = preview.json()
         assert payload["geometry"]["leading_osculating_circle"]
         assert payload["geometry"]["trailing_osculating_circle"]
+        assert payload["placement"]["coordinate_frame"] == "x-axial,y-positive-tangential"
+        assert payload["placement"]["stagger_deg"] == 42.0
+        assert payload["placement"]["control_points"]
         assert payload["features"]["kernel"] == "unified_bspline_g2"
+        assert payload["features"]["metal_angle_difference_deg"] == 25.0
+
+        moved_intent = geometry.spec.intent.model_copy(
+            update={
+                "stagger_deg": 50.0,
+                "inlet_metal_angle_deg": 63.0,
+                "outlet_metal_angle_deg": 38.0,
+            }
+        )
+        moved = client.post(
+            "/api/v2/preview",
+            json=GeometrySpecV2(intent=moved_intent).model_dump(mode="json"),
+        ).json()
+        assert moved["geometry"]["geometry_id"] == payload["geometry"]["geometry_id"]
+        assert moved["geometry"]["intent_id"] == payload["geometry"]["intent_id"]
+        np.testing.assert_array_equal(
+            moved["geometry"]["suction"], payload["geometry"]["suction"]
+        )
+        delta = np.radians(8.0)
+        rotation = np.array(
+            [[np.cos(delta), -np.sin(delta)], [np.sin(delta), np.cos(delta)]]
+        )
+        np.testing.assert_allclose(
+            moved["placement"]["suction"],
+            np.asarray(payload["placement"]["suction"]) @ rotation.T,
+            atol=1e-12,
+        )
         resolved = client.post("/api/v2/curves/resolve", json=spec.model_dump(mode="json"))
         assert resolved.status_code == 200
         assert resolved.json()["spec"]["camber_curve"] is not None
@@ -107,6 +138,10 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         assert studio.status_code == 200
         assert "密切圆半径" in studio.text
         assert "Bezier" not in studio.text
+        assert "高级" not in studio.text
+        assert "切向（ANSYS）" in studio.text
+        assert "弯转角" not in studio.text
+        assert "data-control-overlay" not in studio.text
 
 
 def test_v2_blade_job_and_artifact_download(tmp_path) -> None:

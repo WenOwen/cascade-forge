@@ -1,20 +1,41 @@
 {% extends "base.html" %}
+{% macro tooltip(text) -%}<button class="help-tip" type="button" aria-label="参数说明" data-tooltip="{{ text }}">?</button>{%- endmacro %}
+{% macro parameter(name, label, minimum, maximum, step, help='') -%}
+<div class="parameter-control" data-parameter="{{ name }}">
+  <div class="parameter-heading"><label for="{{ name }}-number">{{ label }}</label>{% if help %}{{ tooltip(help) }}{% endif %}<input id="{{ name }}-number" type="number" data-number min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"></div>
+  <div class="range-row"><span data-min-label>{{ minimum }}</span><input type="range" data-range aria-label="{{ label }}滑动条" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"><span data-max-label>{{ maximum }}</span></div>
+</div>
+{%- endmacro %}
 {% block page_title %}叶型工作室{% endblock %}
 {% block toolbar_actions %}<button class="button" type="button" data-import-spec>导入 spec</button><button class="button" type="button" data-export-spec>导出 spec</button><button class="button primary" type="button" data-save-workspace>保存到 Workspace</button>{% endblock %}
 {% block content %}
 <div class="studio-layout" data-studio-root data-default-spec='{{ default_spec_v2|tojson }}'>
   <aside class="surface-card inspector">
-    <div class="segmented"><button class="active" type="button" data-mode="basic">基础</button><button type="button" data-mode="advanced">高级</button></div>
     <form id="studio-form" class="inspector-form">
       <fieldset><legend>统一内核</legend><p class="field-help">三次开放夹持 B-spline · 法向加厚 · 端点 G2 · 密切圆半径</p><label class="switch-row"><span>双侧厚度联动</span><input type="checkbox" name="linked_thickness" checked></label></fieldset>
-      <fieldset><legend>气动几何</legend><label>进口金属角 <output data-for="inlet_metal_angle_deg"></output><input type="range" name="inlet_metal_angle_deg" min="20" max="75" step="0.1"></label><label>弯转角 <output data-for="turning_angle_deg"></output><input type="range" name="turning_angle_deg" min="0" max="65" step="0.1"></label><label>安装角 <output data-for="stagger_deg"></output><input type="range" name="stagger_deg" min="15" max="65" step="0.1"></label><label>最大厚度 t/c <output data-for="max_thickness_ratio"></output><input type="range" name="max_thickness_ratio" min="0.03" max="0.18" step="0.001"></label><label>最大厚度位置 x/c <output data-for="max_thickness_x_ratio"></output><input type="range" name="max_thickness_x_ratio" min="0.20" max="0.65" step="0.005"></label></fieldset>
-      <fieldset><legend>边缘与形状</legend><div class="field-pair"><label>LE 密切半径 r/c<input type="number" name="leading_edge_radius_ratio" min="0.0005" max="0.03" step="0.0001"></label><label>TE 密切半径 r/c<input type="number" name="trailing_edge_radius_ratio" min="0.0001" max="0.02" step="0.0001"></label></div><div class="field-pair"><label>进口切向柄长<input type="number" name="camber_le_tangent_ratio" min="0.03" max="1.2" step="0.01"></label><label>出口切向柄长<input type="number" name="camber_te_tangent_ratio" min="0.03" max="1.2" step="0.01"></label></div><div class="field-pair"><label>前段因子<input type="number" name="fore_shape_factor" min="0.5" max="1.8" step="0.05"></label><label>后段因子<input type="number" name="aft_shape_factor" min="0.5" max="1.8" step="0.05"></label></div></fieldset>
-      <fieldset class="advanced-fields" hidden><legend>显式曲线合同</legend><p class="field-help">拖拽中弧线控制点会更新此 JSON；浏览器只提交 spec，不复制几何算法。</p><textarea name="explicit_spec" rows="12" spellcheck="false"></textarea></fieldset>
+      <fieldset><legend>截面主参数</legend>
+        <div class="reference-control"><label for="metal-angle-reference">金属角参考方向</label>{{ tooltip('轴向：NASA 轴流叶栅定义，从正轴向量起。切向：ANSYS BladeGen 的互补 Beta 表示，βt = 90° − βa。切换只换算显示值，不改变叶型。') }}<select id="metal-angle-reference" name="metal_angle_reference"><option value="axial">轴向（NASA）</option><option value="tangential">切向（ANSYS）</option></select></div>
+        {{ parameter('inlet_metal_angle_deg', '进口金属角 βLE', -84, 84, 0.1, '前缘处中弧线切线方向，不是进口流动角。正角从轴向转向画布正切向。') }}
+        {{ parameter('outlet_metal_angle_deg', '出口金属角 βTE', -84, 84, 0.1, '尾缘处中弧线切线方向，不是出口流动角。') }}
+        {{ parameter('stagger_deg', '安装角 γ（轴向）', -84, 84, 0.1, 'NASA 定义：弦线与正轴向的夹角。改变安装角只刚体旋转叶型，并同步两端金属角。') }}
+        <div class="derived-value"><span>金属角差 βLE − βTE</span><strong data-angle-difference>—</strong></div>
+        {{ parameter('max_thickness_ratio', '最大厚度 t/c', 0.03, 0.18, 0.001) }}
+        {{ parameter('max_thickness_x_ratio', '最大厚度位置 x/c', 0.20, 0.65, 0.005) }}
+      </fieldset>
+      <fieldset><legend>局部形状参数</legend>
+        {{ parameter('leading_edge_radius_ratio', 'LE 密切半径 r/c', 0.0005, 0.03, 0.0001) }}
+        {{ parameter('trailing_edge_radius_ratio', 'TE 密切半径 r/c', 0.0001, 0.02, 0.0001) }}
+        {{ parameter('camber_le_tangent_ratio', '进口切向柄长', 0.03, 1.2, 0.01) }}
+        {{ parameter('camber_te_tangent_ratio', '出口切向柄长', 0.03, 1.2, 0.01) }}
+        {{ parameter('fore_shape_factor', '前段形状因子', 0.5, 1.8, 0.05) }}
+        {{ parameter('aft_shape_factor', '后段形状因子', 0.5, 1.8, 0.05) }}
+      </fieldset>
+      <details class="json-panel"><summary>后台 Spec JSON</summary><p class="field-help">显示后端最后一次成功解析的完整合同。修改后点击“应用 JSON”。</p><textarea name="explicit_spec" rows="15" spellcheck="false"></textarea><p class="json-error" data-json-error role="alert"></p><div class="button-row"><button class="button primary" type="button" data-apply-json>应用 JSON</button><button class="button" type="button" data-revert-json>恢复</button><button class="button" type="button" data-copy-json>复制</button></div></details>
     </form>
   </aside>
   <section class="studio-main">
-    <article class="surface-card canvas-card"><div class="card-heading"><div><p class="eyebrow">LIVE PREVIEW</p><h2>完整叶型轮廓</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div><svg class="control-overlay" data-control-overlay></svg></div><div class="geometry-meta"><code data-geometry-id>—</code><span data-validation-status class="pill">—</span><span data-intent-id>—</span></div></article>
-    <article class="surface-card analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">角度</button></div><div id="analysis-chart" class="plotly-chart analysis-chart"></div></article>
+    <article class="surface-card canvas-card"><div class="card-heading"><div><p class="eyebrow">AXIAL–TANGENTIAL PREVIEW</p><h2>安装后的完整叶型轮廓</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div></div><div class="geometry-meta"><code data-geometry-id>—</code><span data-validation-status class="pill">—</span><span data-intent-id>—</span></div></article>
+    <article class="surface-card analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">金属线角度</button></div><div id="analysis-chart" class="plotly-chart analysis-chart"></div></article>
     <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span data-le-radius class="mono-value">—</span></div><div id="le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span data-te-radius class="mono-value">—</span></div><div id="te-chart" class="plotly-chart edge-chart"></div></article></div>
   </section>
 </div>
