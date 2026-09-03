@@ -290,3 +290,23 @@ CLI 单型拟合与新版基准恢复通过；恢复后仍为 36 条，无重复
 cd UDF
 .\.venv\Scripts\python.exe -m cascade_forge.cli naca65 benchmark --output datasets/naca65-benchmark-v2.0.0
 ```
+
+## 15. NACA 端区光顺与尖尾缘合同：2026-09-03
+
+`naca65-normal-bspline-v3` 修复 v2 端区曲率振荡。根因有三项：极密端区节点上的无正则最小二乘；sixseries 前缘截断斜率及 `a=1` 尾缘奇异导数与有限 B-spline 端点约束不一致；三次 C2 中弧线的法向场连续阶次不足以保证变化厚度偏置叶面的 C2 曲率连续。
+
+- 中弧线改为五次、简单内节点的 C4 B-spline；共享厚度仍为三次 C2 B-spline。
+- 两者加入可复现的二阶导数公平项；端点切向采用原始有限站位几何，不在 `1-epsilon` 处采样奇异导数。
+- 65A 尾段拟合目标改为直线替换后两张原生叶面的配对中点与半间距，不再误用替换前的解析厚度。
+- 叶面仍严格满足 `S=C+t n`、`P=C-t n`；解析计算节点两侧曲率，并以最大相对跳变 `1e-4` 作为拒绝门禁。
+- LE 保留由极限曲率推导的密切圆。当前 OpenVSP sixseries 基础截面拟合采用规范化尖尾缘：两侧以非零楔角相交，圆角半径的工程约定值为 0，公共密切圆半径在数学上不定义。sixseries 输出的微小端点间隙作为数值追溯信息保留，不解释为 TE 半径。
+
+“NACA 65 没有尾缘半径”不是通用结论。NASA 压气机叶栅资料还定义和测试了有限圆尾缘变体；例如常规 `0.15% c`，以及 `1% c`、`2% c` 的改型。它们是独立几何合同，不能通过把 sixseries 的数值尾缘间隙当半径来获得。本版本未静默选择其中任何一种；Web 的编号快捷输入明确保持 sixseries 尖尾缘语义。若数据库需要压气机圆尾缘，应新增显式 `trailing_edge_radius_ratio` 变体及圆弧接触/相切求解，并建立独立 benchmark/ID。
+
+独立库 `datasets/naca65-benchmark-v3.0.0/` 的 36 型全部 valid：RMS 最大 `1.2614e-4 c`，最大轮廓距离最大 `5.9965e-4 c`，节点相对曲率跳变最大 `1.7241e-7`，无自交。默认 NACA 65-810 (`a=0.8`) 的 RMS 为 `6.9297e-5 c`、最大距离为 `3.8183e-4 c`、尾缘楔角为 `1.7217°`。v1/v2 基准只读保留，不覆盖也不直接比较评估倍数。
+
+Web 的 LE/TE 局部图使用后端生成的 501 点加密端区曲线，避免 201 点显示折线造成“前缘不光顺”的视觉假象，并显示真实 LE 密切圆及 TE 楔角。
+
+原生移植另与固定 commit 附带的 `sixseries.dll` 对 36 型、全部 176 个原始站位逐坐标比较，最大绝对差 `1.9989e-6 c`；v1、v2、v3 三套 manifest 所列 108 个 Parquet 哈希全部复核一致。全套 90 项 pytest 与 Ruff 通过，真实 Chromium 对 65/65A 端区及 320、375、768、1024、1440 px 画布通过，无控制台错误。
+
+来源：[OpenVSP 固定版本 sixseries 源码](https://github.com/OpenVSP/OpenVSP/blob/51bdec01d9a50fa4bdbc960b0def21dcd6330f72/src/external/sixseries/NACA_6_series.f)、[NASA NACA 65 系尾缘半径试验记录](https://ntrs.nasa.gov/citations/19930086925)。

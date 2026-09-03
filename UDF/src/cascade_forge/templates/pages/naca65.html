@@ -11,11 +11,11 @@
 {%- endmacro %}
 {% block title %}NACA 65 实验室 · Cascade Forge{% endblock %}
 {% block page_title %}NACA 65 实验室{% endblock %}
-{% block extra_scripts %}<script src="/static/naca65.js?v=2.0" defer></script>{% endblock %}
+{% block extra_scripts %}<script src="/static/naca65.js?v=3.0" defer></script>{% endblock %}
 {% block toolbar_actions %}<button class="button" type="button" data-naca-refresh>刷新基准</button><button class="button primary" type="button" data-naca-run-benchmark>运行 / 恢复 36 型</button>{% endblock %}
 {% block content %}
 <div class="naca-lab" data-naca-root data-existing-count="{{ naca65_count }}">
-  <p class="field-help">法向分解 v2：真实中弧线 + 共享厚度，叶面直接由 C ± t·n 生成。旧 v1 基准因分解与距离评估问题仅保留归档，不与新版数值直接比较。</p>
+  <p class="field-help">光顺法向分解 v3：C4 五次中弧线 + C2 三次共享厚度，叶面直接由 C ± t·n 生成。当前是 OpenVSP sixseries 基础截面的尖尾缘规范闭合；不是采用 0.15%、1% 或 2% 弦长圆尾缘的压气机试验改型。</p>
   <section class="naca-workbench">
     <aside class="surface-card naca-inspector">
       <p class="eyebrow">NASA SIXSERIES · 1974</p>
@@ -24,9 +24,9 @@
       <form data-naca-form class="inspector-form">
         <fieldset>
           <legend>输入方式</legend>
-          <div class="segmented" role="group" aria-label="NACA 输入方式"><button class="active" type="button" data-naca-mode="general">通用参数</button><button type="button" data-naca-mode="preset">压气机编号</button></div>
+          <div class="segmented" role="group" aria-label="NACA 输入方式"><button class="active" type="button" data-naca-mode="general">通用参数</button><button type="button" data-naca-mode="preset">编号快捷输入</button></div>
           <label data-general-field>翼型族<select name="family"><option value="65">NACA 65</option><option value="65A">NACA 65A（修型）</option></select></label>
-          <label data-preset-field hidden>标准编号<input name="preset" value="65-810" placeholder="65-010 / 65-(12)10"><small>预设按标准 65 系、a=1.0 解析；不会伪造 65A 编号。</small></label>
+          <label data-preset-field hidden>sixseries 编号<input name="preset" value="65-810" placeholder="65-010 / 65-(12)10"><small>仅映射 65 系厚度、Clᵢ 与 a=1.0；不会自动加入压气机圆尾缘，也不会伪造 65A 编号。</small></label>
         </fieldset>
         <fieldset data-general-field><legend>原生参数</legend>
           {{ slider('thickness_ratio', '最大厚度 t/c', 0.03, 0.18, 0.005, 0.10, 'sixseries 共形映射厚度分布的目标最大厚度比。') }}
@@ -52,8 +52,9 @@
         <article class="metric-card"><span>核心区 RMS</span><strong data-metric="core-rms">—</strong><small>0.02 ≤ x/c ≤ 0.98</small></article>
         <article class="metric-card"><span>Hausdorff 近似</span><strong data-metric="hausdorff">—</strong><small>双向点到加密轮廓线段</small></article>
       </div>
-      <article class="surface-card"><h2>法向分解校验</h2><p class="field-help">t(s)=√s(1−s)B(s)，s 为原生中弧线归一化弧长。前缘半径由极限曲率推导；尾缘是尖尾缘，不伪造圆弧。</p><dl class="definition-grid naca-invariants"><dt>中点与中弧线偏差</dt><dd data-invariant="midpoint_error_max">—</dd><dt>法向正交误差</dt><dd data-invariant="normal_offset_error_max">—</dd><dt>中弧线 RMS</dt><dd data-invariant="camber_rms_distance_ratio">—</dd><dt>半厚度 RMS</dt><dd data-invariant="half_thickness_rms_ratio">—</dd></dl><div id="naca-thickness-chart" class="plotly-chart naca-error-chart"></div><details><summary>模型限制与端区说明</summary><ul data-naca-warnings></ul></details></article>
+      <article class="surface-card"><h2>法向分解校验</h2><p class="field-help">t(s)=√s(1−s)B(s)，s 为原生中弧线归一化弧长。前缘半径由极限曲率推导；尾缘是尖尾缘，不伪造圆弧。</p><dl class="definition-grid naca-invariants"><dt>中点与中弧线偏差</dt><dd data-invariant="midpoint_error_max">—</dd><dt>法向正交误差</dt><dd data-invariant="normal_offset_error_max">—</dd><dt>节点相对曲率跳变</dt><dd data-invariant="relative_curvature_knot_jump_max">—</dd><dt>尾缘楔角</dt><dd data-invariant="trailing_wedge_angle_deg" data-angle-value>—</dd><dt>中弧线 RMS</dt><dd data-invariant="camber_rms_distance_ratio">—</dd><dt>半厚度 RMS</dt><dd data-invariant="half_thickness_rms_ratio">—</dd></dl><div id="naca-thickness-chart" class="plotly-chart naca-error-chart"></div><details><summary>模型限制与端区说明</summary><ul data-naca-warnings></ul></details></article>
       <article class="surface-card"><div class="card-heading"><div><p class="eyebrow">SIGNED NORMAL DEVIATION</p><h2>叶面拟合误差</h2></div><span class="pill" data-naca-status>—</span></div><div id="naca-error-chart" class="plotly-chart naca-error-chart"></div></article>
+      <p class="field-help">端区图：实线为原生坐标，虚线为加密拟合；蓝色为吸力面，橙色为压力面，红色为前缘密切圆。</p>
       <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span class="mono-value" data-naca-le>—</span></div><div id="naca-le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span class="mono-value" data-naca-te>—</span></div><div id="naca-te-chart" class="plotly-chart edge-chart"></div></article></div>
       <article class="surface-card"><div class="card-heading"><h2>几何特征偏差</h2><span class="field-help">B-spline − NACA 原生</span></div><div class="table-scroll"><table class="data-table"><thead><tr><th>特征</th><th>偏差</th></tr></thead><tbody data-naca-feature-deltas><tr><td colspan="2" class="empty-state">拟合后显示</td></tr></tbody></table></div></article>
     </div>

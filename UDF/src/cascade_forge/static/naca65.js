@@ -160,7 +160,8 @@
     renderErrors(reference, payload.fit_report);
     renderEdges(reference, fitted);
     $$('[data-invariant]', root).forEach(node => {
-      node.textContent = scientific(payload.fit_report?.diagnostics?.[node.dataset.invariant]);
+      const value = payload.fit_report?.diagnostics?.[node.dataset.invariant];
+      node.textContent = node.hasAttribute("data-angle-value") && value != null ? `${Number(value).toFixed(4)}°` : scientific(value);
     });
     $("[data-naca-warnings]", root).innerHTML = (payload.fit_report?.warnings || []).map(w => `<li>${escapeHTML(w)}</li>`).join("");
     const sample = reference.parameter;
@@ -202,9 +203,12 @@
         { ...xy(select(reference.normalized_pressure)), mode: "lines+markers", name: "NACA PS", marker: { size: 3 }, line: { color: colors.orange } }
       ];
       if (fitted) {
+        const view = fitted.metadata?.edge_views?.[edge];
+        const fittedSuction = view?.suction || select(fitted.suction);
+        const fittedPressure = view?.pressure || select(fitted.pressure);
         traces.push(
-          { ...xy(select(fitted.suction)), mode: "lines", name: "拟合 SS", line: { color: colors.blue, dash: "dash" } },
-          { ...xy(select(fitted.pressure)), mode: "lines", name: "拟合 PS", line: { color: colors.orange, dash: "dash" } }
+          { ...xy(fittedSuction), mode: "lines", name: "拟合 SS（加密）", line: { color: colors.blue, dash: "dash" } },
+          { ...xy(fittedPressure), mode: "lines", name: "拟合 PS（加密）", line: { color: colors.orange, dash: "dash" } }
         );
         const circle = fitted[`${edge}_osculating_circle`];
         if (circle?.length) {
@@ -213,12 +217,12 @@
         }
         traces.push({ ...xy([isLeading ? fitted.camber[0] : fitted.camber.at(-1)]), mode: "markers", name: isLeading ? "鼻点" : "尖尾缘", marker: { color: colors.ink, size: 6 } });
       }
-      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: { text: "x/c" }, zeroline: false }, yaxis: { title: { text: "y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false }, legend: { orientation: "h", y: 1.08 } });
+      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: { text: "x/c" }, zeroline: false }, yaxis: { title: { text: "y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false }, showlegend: false });
     };
     render("leading", true);
     render("trailing", false);
     $("[data-naca-le]", root).textContent = fitted ? `r/c = ${fitted.edge_metrics.leading_edge_radius_ratio.toExponential(4)}` : "—";
-    $("[data-naca-te]", root).textContent = fitted ? "尖尾缘 · r/c = 0" : "—";
+    $("[data-naca-te]", root).textContent = fitted ? `尖尾缘 · 楔角 ${fitted.edge_metrics.trailing_wedge_angle_deg.toFixed(3)}°` : "—";
   }
 
   async function loadCases() {
