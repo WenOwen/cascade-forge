@@ -15,6 +15,7 @@ from .legacy import ingest_legacy_anchors
 from .models_naca65 import (
     NACA65BenchmarkConfig,
     NACA65BenchmarkManifest,
+    NACA65CamberCurveSpec,
     NACA65Family,
     NACA65FitGeometry,
     NACA65FitReport,
@@ -68,6 +69,7 @@ __all__ = [
     "MetalAngleReference",
     "NACA65BenchmarkConfig",
     "NACA65BenchmarkManifest",
+    "NACA65CamberCurveSpec",
     "NACA65Family",
     "NACA65FitReport",
     "NACA65FitGeometry",

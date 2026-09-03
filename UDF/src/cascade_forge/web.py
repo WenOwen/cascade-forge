@@ -122,7 +122,7 @@ def create_app(
     resolved_naca65_root = (
         Path(naca65_dataset_root).resolve()
         if naca65_dataset_root
-        else resolved_v2_root.parent / "naca65-benchmark-v2.0.0"
+        else resolved_v2_root.parent / "naca65-benchmark-v3.0.0"
     )
     naca65_store = NACA65BenchmarkStore(resolved_naca65_root)
     jobs = JobManager(store)

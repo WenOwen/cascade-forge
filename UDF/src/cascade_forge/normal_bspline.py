@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.interpolate import BSpline, CubicHermiteSpline, PchipInterpolator
+from scipy.interpolate import BSpline, PchipInterpolator
 from scipy.optimize import lsq_linear
 
 from .curves import CurveEvaluator, unit_tangent_and_normal
-from .models_naca65 import NACA65FitGeometry, NACA65Geometry, NACA65SplineSpec
+from .models_naca65 import (
+    NACA65CamberCurveSpec,
+    NACA65FitGeometry,
+    NACA65Geometry,
+    NACA65SplineSpec,
+)
 from .models_v2 import BSplineCurveSpec
 
 
@@ -16,70 +21,108 @@ def fit_decomposition(reference: NACA65Geometry, max_iterations: int = 80):
     c = np.asarray(reference.construction_camber).copy()
     c[[0, -1]] = [[0.0, 0.0], [1.0, 0.0]]
     n = np.asarray(reference.construction_normals)
+    half = np.asarray(reference.construction_half_thickness).copy()
+    source_decomposition = "sixseries-mean-line-normal-stations"
+    if reference.spec.family.value == "65A":
+        # Sixseries replaces the two surfaces independently by straight lines
+        # aft of x~=0.82.  The pre-replacement analytical mean line/thickness
+        # are therefore not the geometry that must be fitted in this region.
+        source_suction = np.asarray(reference.raw_suction)
+        source_pressure = np.asarray(reference.raw_pressure)
+        c = 0.5 * (source_suction + source_pressure)
+        half = 0.5 * np.linalg.norm(source_suction - source_pressure, axis=1)
+        c[[0, -1]] = [[0.0, 0.0], [1.0, 0.0]]
+        u = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(c, axis=0), axis=1))]
+        u /= u[-1]
+        source_decomposition = "paired-native-surfaces-after-65A-tail-rule"
+    half[[0, -1]] = 0.0
     length = np.linalg.norm(np.diff(c, axis=0), axis=1).sum()
     derivatives = length * np.column_stack([n[:, 1], -n[:, 0]])
-    # Cluster knots at the nose and at the NASA 6A straight-tail transition.
+    # The analytical a=1 mean line has a logarithmic endpoint derivative.
+    # A finite cubic spline cannot represent that singularity; use the
+    # one-sided derivative of the actual resolved station geometry instead of
+    # probing at an arbitrary 1-epsilon and creating a trailing-edge hook.
+    target_curve = PchipInterpolator(u, c)
+    derivatives[-1] = target_curve.derivative()(1.0)
+    # Resolve both edges and the NASA 6A straight-tail transition without the
+    # extremely close knot sequence that caused endpoint curvature ringing.
     x_breaks = np.array(
         [
-            0.00025,
             0.001,
-            0.0025,
             0.005,
-            0.01,
-            0.02,
+            0.015,
             0.04,
             0.08,
             0.15,
             0.25,
-            0.35,
-            0.45,
+            0.4,
             0.55,
-            0.65,
-            0.75,
-            0.8,
+            0.7,
             0.82,
-            0.85,
             0.9,
-            0.95,
-            0.98,
-            0.995,
-            0.999,
+            0.96,
+            0.99,
         ]
     )
-    knots = np.r_[np.zeros(4), np.interp(x_breaks, c[:, 0], u), np.ones(4)]
-    count = len(knots) - 4
+    knots = np.r_[np.zeros(6), x_breaks, np.ones(6)]
+    count = len(knots) - 6
     sample = 0.5 * (1 - np.cos(np.linspace(0, np.pi, 1601)))
-    basis_spline = BSpline(knots, np.eye(count), 3)
+    # A cubic mean line is only C2, so its variable normal offset need not
+    # have continuous curvature. Quintic/simple knots give C4 mean line and
+    # C3 normal, while cubic thickness still makes the final sides C2.
+    basis_spline = BSpline(knots, np.eye(count), 5)
     basis = basis_spline(sample)
-    target_curve = CubicHermiteSpline(u, c, derivatives)
     target = target_curve(sample)
     controls = np.zeros((count, 2))
     controls[0], controls[-1] = c[0], c[-1]
-    controls[1] = c[0] + derivatives[0] * knots[4] / 3
-    controls[-2] = c[-1] - derivatives[-1] * (1 - knots[-5]) / 3
+    controls[1] = c[0] + derivatives[0] * knots[6] / 5
+    controls[-2] = c[-1] - derivatives[-1] * (1 - knots[-7]) / 5
     known = [0, 1, count - 2, count - 1]
     free = np.arange(2, count - 2)
-    # Position is primary; a small derivative term stabilizes the normal field.
-    derivative_weight = 2e-4
-    full_matrix = np.vstack([basis, derivative_weight * basis_spline(sample, 1)])
-    full_target = np.vstack([target, derivative_weight * target_curve(sample, 1)])
+    # Minimise mean squared position error plus integrated squared second derivative.
+    # The fairness term removes nonphysical endpoint ringing while retaining
+    # the NACA loading break and the 65A tail transition.
+    grid = np.linspace(0.0, 1.0, 1001)
+    camber_fairness = 2e-8
+    position_matrix = basis / np.sqrt(len(sample))
+    position_target = target / np.sqrt(len(sample))
+    fair_matrix = basis_spline(grid, 2) * np.sqrt(camber_fairness / (len(grid) - 1))
+    full_matrix = np.vstack([position_matrix, fair_matrix])
+    full_target = np.vstack([position_target, np.zeros((len(grid), 2))])
     controls[free] = np.linalg.lstsq(
         full_matrix[:, free], full_target - full_matrix[:, known] @ controls[known], rcond=None
     )[0]
-    camber = BSplineCurveSpec(control_points=controls.tolist(), knots=knots.tolist())
+    camber = NACA65CamberCurveSpec(control_points=controls.tolist(), knots=knots.tolist())
 
-    half = np.asarray(reference.construction_half_thickness)
     interior = (u > 0) & (u < 1)
     q = half[interior] / (np.sqrt(u[interior]) * (1 - u[interior]))
     # LE square-root and sharp-TE linear factors enforce closure without a
     # nonphysical radius-as-thickness endpoint or a second surface spline.
     shape_target = PchipInterpolator(u[interior], q, extrapolate=True)(sample)
-    shape_fit = lsq_linear(basis, shape_target, bounds=(1e-8, 2.0), max_iter=max_iterations)
+    shape_target[0] = q[0]
+    shape_target[-1] = max(1e-8, -float(PchipInterpolator(u, half).derivative()(1.0)))
+    thickness_fairness = 1e-8
+    thickness_knots = np.r_[np.zeros(4), x_breaks, np.ones(4)]
+    thickness_basis = BSpline(thickness_knots, np.eye(len(thickness_knots) - 4), 3)
+    shape_fit = lsq_linear(
+        np.vstack(
+            [
+                thickness_basis(sample) / np.sqrt(len(sample)),
+                thickness_basis(grid, 2) * np.sqrt(thickness_fairness / (len(grid) - 1)),
+            ]
+        ),
+        np.r_[shape_target / np.sqrt(len(sample)), np.zeros(len(grid))],
+        bounds=(1e-8, 2.0),
+        max_iter=max_iterations,
+    )
     spec = NACA65SplineSpec(
         camber_curve=camber,
         thickness_shape_curve=BSplineCurveSpec(
-            control_points=shape_fit.x[:, None].tolist(), knots=knots.tolist()
+            control_points=shape_fit.x[:, None].tolist(), knots=thickness_knots.tolist()
         ),
+        source_decomposition=source_decomposition,
+        camber_fairness_weight=camber_fairness,
+        thickness_fairness_weight=thickness_fairness,
     )
     return spec, shape_fit
 
@@ -96,6 +139,65 @@ def evaluate_normal_offset(spec: NACA65SplineSpec, parameter: np.ndarray):
     suction = camber + half[:, None] * normals
     pressure = camber - half[:, None] * normals
     return suction, pressure, camber, 2 * half, normals
+
+
+def normal_offset_curvatures(spec: NACA65SplineSpec, parameter: np.ndarray):
+    """Analytic signed side curvature; use the regular sqrt(s) nose limit at s=0."""
+    parameter = np.asarray(parameter, dtype=float)
+    if np.any((parameter < 0) | (parameter > 1)):
+        raise ValueError("曲率参数必须位于 [0, 1]")
+    u = np.maximum(parameter, 1e-14)
+    ce = CurveEvaluator(spec.camber_curve)
+    first, second, third = (ce.evaluate(u, order) for order in (1, 2, 3))
+    speed = np.linalg.norm(first, axis=1)
+    speed_first = np.sum(first * second, axis=1) / speed
+    speed_second = (np.sum(second * second + first * third, axis=1) - speed_first**2) / speed
+    tangent = first / speed[:, None]
+    tangent_first = second / speed[:, None] - first * (speed_first / speed**2)[:, None]
+    tangent_second = (
+        third / speed[:, None]
+        - 2 * second * (speed_first / speed**2)[:, None]
+        - first * (speed_second / speed**2)[:, None]
+        + 2 * first * (speed_first**2 / speed**3)[:, None]
+    )
+    normal, normal_first, normal_second = (
+        np.column_stack([-value[:, 1], value[:, 0]])
+        for value in (tangent, tangent_first, tangent_second)
+    )
+    be = CurveEvaluator(spec.thickness_shape_curve)
+    b, db, ddb = (be.evaluate(u, order)[:, 0] for order in (0, 1, 2))
+    root = np.sqrt(u)
+    g = root * (1 - u)
+    dg = (1 - 3 * u) / (2 * root)
+    ddg = -(1 + 3 * u) / (4 * u * root)
+    h, dh, ddh = g * b, dg * b + g * db, ddg * b + 2 * dg * db + g * ddb
+    offset_first = dh[:, None] * normal + h[:, None] * normal_first
+    offset_second = (
+        ddh[:, None] * normal + 2 * dh[:, None] * normal_first + h[:, None] * normal_second
+    )
+    curvatures = []
+    nose_speed = np.linalg.norm(ce.evaluate([0.0], 1)[0])
+    nose_shape = be.evaluate([0.0])[0, 0]
+    for sign in (1, -1):
+        d1, d2 = first + sign * offset_first, second + sign * offset_second
+        curvature = (d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]) / np.linalg.norm(d1, axis=1) ** 3
+        curvature[parameter == 0] = -sign * 2 * nose_speed / nose_shape**2
+        curvatures.append(curvature)
+    return tuple(curvatures)
+
+
+def _curvature_knot_jump(spec: NACA65SplineSpec) -> float:
+    breaks = np.unique(spec.camber_curve.knots + spec.thickness_shape_curve.knots)
+    interior = breaks[1:-1]
+    epsilon = 1e-8 * np.minimum(np.diff(breaks)[:-1], np.diff(breaks)[1:])
+    left = normal_offset_curvatures(spec, interior - epsilon)
+    right = normal_offset_curvatures(spec, interior + epsilon)
+    return float(
+        max(
+            np.max(np.abs(a - b) / np.maximum(1.0, np.maximum(np.abs(a), np.abs(b))))
+            for a, b in zip(left, right, strict=True)
+        )
+    )
 
 
 def generate_normal_offset_profile(
@@ -115,6 +217,23 @@ def generate_normal_offset_profile(
     midpoint_error = np.linalg.norm(0.5 * (suction + pressure) - camber, axis=1)
     tangents = np.column_stack([normals[:, 1], -normals[:, 0]])
     orthogonal_error = np.abs(np.sum((suction - camber) * tangents, axis=1))
+    tail_speed = np.linalg.norm(ce.evaluate([1.0], 1)[0])
+    tail_shape = float(CurveEvaluator(spec.thickness_shape_curve).evaluate([1.0])[0, 0])
+    edge_views = {}
+    for name, edge_u in (
+        ("leading", np.linspace(0.0, np.sqrt(0.06), 501) ** 2),
+        ("trailing", np.linspace(0.94, 1.0, 501)),
+    ):
+        edge_ss, edge_ps, edge_c, _, _ = evaluate_normal_offset(spec, edge_u)
+        curvature_ss, curvature_ps = normal_offset_curvatures(spec, edge_u)
+        edge_views[name] = {
+            "parameter": edge_u.tolist(),
+            "suction": edge_ss.tolist(),
+            "pressure": edge_ps.tolist(),
+            "camber": edge_c.tolist(),
+            "suction_curvature": curvature_ss.tolist(),
+            "pressure_curvature": curvature_ps.tolist(),
+        }
     return NACA65FitGeometry(
         geometry_id=spec.geometry_id,
         source_id=source_id,
@@ -129,6 +248,8 @@ def generate_normal_offset_profile(
         edge_metrics={
             "leading_edge_radius_ratio": float(radius),
             "trailing_edge_radius_ratio": 0.0,
+            "trailing_wedge_angle_deg": float(np.degrees(2 * np.arctan2(tail_shape, tail_speed))),
+            "relative_curvature_knot_jump_max": _curvature_knot_jump(spec),
             "midpoint_error_max": float(midpoint_error.max()),
             "normal_offset_error_max": float(orthogonal_error.max()),
             "closure_error_max": float(
@@ -141,6 +262,9 @@ def generate_normal_offset_profile(
             "leading_edge_nose": camber[0].tolist(),
             "trailing_edge_nose": camber[-1].tolist(),
             "trailing_edge_kind": "sharp; no common osculating circle",
+            "trailing_edge_osculating_radius": None,
+            "edge_views": edge_views,
+            "edge_continuity": "G2 joined nose; C2 sides at simple knots; intentional sharp TE",
             "surface_authority": "C(s) +/- sqrt(s)*(1-s)*B(s)*n(s); no surface refit",
         },
     )

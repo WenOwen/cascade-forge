@@ -34,7 +34,7 @@ class NACA65BenchmarkStore:
             version = json.loads(manifest_path.read_text(encoding="utf-8"))["benchmark_version"]
             if version != NACA65_BENCHMARK_VERSION:
                 raise ValueError(
-                    f"旧基准 {version} 保留只读；请使用 naca65-benchmark-v2.0.0 新目录"
+                    f"旧基准 {version} 保留只读；请使用 naca65-benchmark-v3.0.0 新目录"
                 )
         self.case_dir = self.root / "tables" / "cases"
         self.run_dir = self.root / "runs"

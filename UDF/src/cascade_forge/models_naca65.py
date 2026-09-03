@@ -8,11 +8,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .models import _round_floats
-from .models_v2 import BSplineCurveSpec
+from .models_v2 import BSplineCurveSpec, _check_spline
 
 NACA65_SCHEMA_VERSION = "1.0.0"
 NACA65_ALGORITHM_VERSION = "nasa-sixseries-1974-python-v1"
-NACA65_BENCHMARK_VERSION = "naca65-benchmark-2.0.0"
+NACA65_BENCHMARK_VERSION = "naca65-benchmark-3.0.0"
 
 
 class NACA65Family(StrEnum):
@@ -110,23 +110,56 @@ class NACA65FitReport(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     diagnostics: dict[str, float] = Field(default_factory=dict)
     error_parameter: list[float] = Field(default_factory=list)
-    method_version: str = "naca65-normal-bspline-v2"
+    method_version: str = "naca65-normal-bspline-v3"
+
+
+class NACA65CamberCurveSpec(BaseModel):
+    """C4 quintic mean line: its normal field is C3 at simple knots."""
+
+    model_config = ConfigDict(frozen=True)
+    degree: Literal[5] = 5
+    control_points: list[list[float]]
+    knots: list[float]
+
+    @model_validator(mode="after")
+    def check_shape(self) -> NACA65CamberCurveSpec:
+        _check_spline(self.control_points, self.knots, self.degree)
+        if len(self.control_points) < 6 or any(len(point) != 2 for point in self.control_points):
+            raise ValueError("NACA 五次中弧线至少需要六个二维控制点")
+        interior = self.knots[6:-6]
+        if len(set(interior)) != len(interior):
+            raise ValueError("NACA 中弧线仅允许简单内节点，以保证法向叶面曲率连续")
+        return self
 
 
 class NACA65SplineSpec(BaseModel):
     """Authoritative normal-offset model, not a v2.1 surface approximation."""
 
-    generator_version: Literal["naca65-normal-bspline-v2"] = "naca65-normal-bspline-v2"
-    camber_curve: BSplineCurveSpec
+    generator_version: Literal["naca65-normal-bspline-v3"] = "naca65-normal-bspline-v3"
+    camber_curve: NACA65CamberCurveSpec
     thickness_shape_curve: BSplineCurveSpec
     linked_thickness: Literal[True] = True
     thickness_law: Literal["sqrt(s)*(1-s)*B(s)"] = "sqrt(s)*(1-s)*B(s)"
     parameter_convention: str = "normalized-source-mean-line-arclength"
     trailing_edge: Literal["sharp"] = "sharp"
+    source_decomposition: str = "sixseries-mean-line-normal-stations"
+    camber_fairness_weight: float = 2e-8
+    thickness_fairness_weight: float = 1e-8
 
     @property
     def geometry_id(self) -> str:
-        raw = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        raw = json.dumps(
+            self.model_dump(
+                mode="json",
+                exclude={
+                    "source_decomposition",
+                    "camber_fairness_weight",
+                    "thickness_fairness_weight",
+                },
+            ),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return "geo_naca_normal_" + hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
@@ -156,7 +189,7 @@ class NACA65FitGeometry(BaseModel):
 class NACA65BenchmarkConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
-    benchmark_version: Literal["naca65-benchmark-2.0.0"] = NACA65_BENCHMARK_VERSION
+    benchmark_version: Literal["naca65-benchmark-3.0.0"] = NACA65_BENCHMARK_VERSION
     thickness_ratios: tuple[float, ...] = (0.06, 0.10, 0.15)
     design_lift_coefficients: tuple[float, ...] = (0.0, 0.8, 1.2)
     series_65_loading_parameters: tuple[float, ...] = (0.6, 0.8, 1.0)
@@ -175,7 +208,7 @@ class NACA65BenchmarkConfig(BaseModel):
 
 class NACA65BenchmarkManifest(BaseModel):
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
-    benchmark_version: Literal["naca65-benchmark-2.0.0"] = NACA65_BENCHMARK_VERSION
+    benchmark_version: Literal["naca65-benchmark-3.0.0"] = NACA65_BENCHMARK_VERSION
     run_id: str
     config: NACA65BenchmarkConfig
     total_cases: int

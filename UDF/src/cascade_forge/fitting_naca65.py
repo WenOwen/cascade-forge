@@ -32,17 +32,22 @@ def fit_reference_geometry(
     spec, result = fit_decomposition(reference, max_design_evaluations)
     fitted = generate_normal_offset_profile(spec, reference.native_id)
     warnings = [
-        "尖尾缘半径为 0：没有伪造正半径或独立再拟合叶面。",
-        "NASA 在 x/c<0.005 使用受限构造斜率；端区法向与严格中弧线导数存在原生差异。",
+        "尖尾缘的圆角半径约定为 0；公共密切圆半径不定义。原始数值间隙不是圆角半径。",
+        "五次 C4 中弧线 + 三次 C2 共享厚度，以解析法向直接构造 C2 叶面；使用二阶导数公平化。",
+        "NASA 前缘构造斜率有截断；a=1 尾缘解析导数奇异。"
+        "拟合采用原始站位的一侧有限切向，端区误差如实保留。",
     ]
     if reference.spec.family.value == "65A":
-        warnings.append("65A 原生直线尾段仍作为参考真值；共享法向模型的尾段偏差计入误差。")
+        warnings.append(
+            "65A 拟合目标使用直线尾段替换后的配对叶面中点与半间距，"
+            "不再误用替换前厚度；严格法向近似残差仍计入误差。"
+        )
     report = evaluate_reference_fit(
         reference,
         fitted,
         iterations=max(1, result.nit),
         converged=bool(result.success),
-        termination_reason="independent_camber_and_shared_thickness_lsq",
+        termination_reason="fair_quintic_camber_and_shared_cubic_thickness_lsq",
         warnings=warnings,
         fit_config={
             "max_outer_iterations": max_outer_iterations,
@@ -137,6 +142,8 @@ def evaluate_reference_fit(
     diagnostics["outline_self_intersects"] = float(intersects)
     if intersects:
         status = "rejected"
+    if fitted.edge_metrics["relative_curvature_knot_jump_max"] > 1e-4:
+        status = "rejected"
     fit_payload = {
         "native_id": reference.native_id,
         "geometry_id": fitted.geometry_id,
@@ -172,6 +179,7 @@ def evaluate_reference_fit(
         warnings=warnings or [],
         diagnostics=diagnostics,
         error_parameter=sample.tolist(),
+        method_version=fitted.spec.generator_version,
     )
 
 

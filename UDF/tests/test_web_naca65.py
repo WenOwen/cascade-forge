@@ -93,6 +93,6 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
         manifest = client.get("/api/v2/naca65/manifest")
         assert manifest.status_code == 200
         assert manifest.json()["total_cases"] == 2
-        assert manifest.json()["benchmark_version"] == "naca65-benchmark-2.0.0"
+        assert manifest.json()["benchmark_version"] == "naca65-benchmark-3.0.0"
         jobs = client.get("/api/v2/jobs").json()["items"]
         assert any(item["job_id"] == job["job_id"] for item in jobs)
