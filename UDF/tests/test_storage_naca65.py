@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from cascade_forge.benchmark_naca65 import benchmark_specs, run_naca65_benchmark
 from cascade_forge.models_naca65 import NACA65BenchmarkConfig
 from cascade_forge.storage_naca65 import NACA65BenchmarkStore
@@ -40,6 +42,10 @@ def test_independent_benchmark_store_and_resume(tmp_path) -> None:
     assert second.run_id == first.run_id
     assert store.count() == 2
     assert second.files == first.files
+
+    changed = _small_config().model_copy(update={"max_design_evaluations": 20})
+    with pytest.raises(ValueError, match="不同的 NACA 65 拟合配置"):
+        run_naca65_benchmark(changed, root)
 
 
 def test_benchmark_job_state_is_persistent(tmp_path) -> None:

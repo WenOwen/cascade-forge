@@ -197,3 +197,45 @@ cd UDF
 - 实际端点切线误差门槛仍为 `0.05°`。
 - 真实 Chromium 验证了数值/滑条同步、参考系切换、tooltip、原生控制点缩放，以及 320、375、768、1024、1440 px 无水平溢出、modebar 不越界。
 - LE/TE 局部视图与主画布均使用轴向—切向坐标，显示密切圆、圆心、鼻点、切线和实际 `r/c`。
+
+## 13. NACA 65/65A 原生生成与拟合基准
+
+### 数学内核与来源
+
+新增纯 Python/NumPy 的 NASA sixseries 移植，支持 NACA 65、65A、`t/c`、设计升力系数 `Clᵢ` 与载荷参数 `a`。65A 按原始算法固定 `a=0.8`。厚度由 sixseries 共形映射表生成，中弧线采用 a 型载荷分布，厚度沿中弧线法线叠加。每个案例同时保存 176 点/侧的 `raw_native` 和 201 点/侧、统一尾缘的 `normalized_closed`。
+
+开发参考固定在 OpenVSP commit `51bdec01d9a50fa4bdbc960b0def21dcd6330f72`，运行时不依赖 OpenVSP、C 或 Fortran：
+
+- `NACA_6_series.c` SHA-256：`e41a48399647340fa09eb4f015a1d119a0da8d7959f6cfc43badea849964c342`
+- `NACA_6_series.f` SHA-256：`59f5caf05868e9cb15accba897396f3f24b90837540e3980e4cc7f261b2c232d`
+- 参考源码：[OpenVSP sixseries](https://github.com/OpenVSP/OpenVSP/tree/51bdec01d9a50fa4bdbc960b0def21dcd6330f72/src/external/sixseries)
+
+压气机编号解析支持 `65-010`、`65-410`、`65-810` 和 `65-(12)10`。编号是 NACA 65 通用参数的快捷输入，不作为 65A 别名。`native_id` 由规范参数、算法版本和尾缘规则确定；显示安装角不参与身份。
+
+### API、CLI 与 Web
+
+公开 Python API 为 `generate_naca65`、`fit_reference_geometry`、`evaluate_reference_fit` 和 `run_naca65_benchmark`。HTTP 路径集中在 `/api/v2/naca65`，CLI 使用以下命令：
+
+```powershell
+cd UDF
+.\.venv\Scripts\python.exe -m cascade_forge.cli naca65 generate --preset 65-810 --destination output/naca65-810.json
+.\.venv\Scripts\python.exe -m cascade_forge.cli naca65 fit --preset 65-810 --destination output/naca65-810-fit.json
+.\.venv\Scripts\python.exe -m cascade_forge.cli naca65 benchmark --output datasets/naca65-benchmark-v1.0.0
+.\.venv\Scripts\python.exe -m cascade_forge.cli naca65 export <fit_id> --dataset datasets/naca65-benchmark-v1.0.0 --destination output/naca65-case.csv
+```
+
+Web 侧栏的“NACA 65 实验室”提供同步数字框/滑动条、通用参数/标准编号、原生与 B-spline 轮廓叠加、叶面有符号法向误差、LE/TE 密切圆视图、36 型热力图、案例表及 CSV/JSON/Parquet 导出。页面复用统一 Plotly 控制器，几何计算只在 Python 后端执行。
+
+### 2026-09-03：36 型完整评估
+
+正式基准写入独立的 `datasets/naca65-benchmark-v1.0.0/`，没有修改 v1/v2.1 正式叶型库或其 Geometry ID。固定矩阵全部完成：NACA 65 为 27 型，NACA 65A 为 9 型；36 个 `native_id` 和 36 个 `fit_id` 均唯一，所有案例均收敛并保留完整报告。
+
+- 状态：0 valid、8 warning、28 rejected、0 failed。
+- 全轮廓 RMS：最小 `7.069×10⁻⁴c`、中位数 `1.741×10⁻³c`、最大 `2.285×10⁻³c`。
+- 全轮廓最大距离：最小 `2.265×10⁻³c`、中位数 `4.240×10⁻³c`、最大 `6.315×10⁻³c`。
+- 最佳案例：NACA 65A-006，RMS `7.069×10⁻⁴c`、最大距离 `2.265×10⁻³c`，状态 warning。
+- 分族状态：NACA 65 为 6 warning / 21 rejected；NACA 65A 为 2 warning / 7 rejected。
+
+这说明当前 `unified-bspline-g2-v2.1` 的固定控制自由度和密切圆边缘合同可以稳定拟合整个矩阵，但尚未达到冻结的 valid 门槛。基准库的价值正是量化这项模型偏差；后续若增加控制点、调整端区权重或边缘合同，应创建新的拟合配置/基准版本，不能覆盖本结果。
+
+真实 Chromium 已在 320、375、768、1024、1440 px 检查 NACA 页面：无水平溢出，Plotly modebar 未越出画布，单型生成/拟合成功且控制台无错误。视觉回归截图位于忽略 Git 的 `output/playwright/`。
