@@ -1,5 +1,14 @@
 {% extends "base.html" %}
-{% block page_title %}数据集与批次{% endblock %}
+{% block page_title %}数据集初始化{% endblock %}
 {% block content %}
-<div class="two-column" data-dataset-root><article class="surface-card"><p class="eyebrow">GENERATION</p><h2>geometry-v2.0.0</h2><form class="stack-form" data-batch-form><label>目标有效叶型<input name="target_valid" type="number" min="1" max="100000" value="20000"></label><label>并行进程<input name="workers" type="number" min="1" max="64" value="{{ default_workers }}"></label><button class="button primary" type="submit" {{ 'disabled' if not anchor_gate_passed else '' }}>创建或恢复批次</button></form><div class="progress-track"><span data-batch-progress></span></div><div class="result-summary" data-batch-status>{{ '' if anchor_gate_passed else '请先在 NASA 锚点页完成 48 截面拟合门禁。' }}</div></article><article class="surface-card"><div class="card-heading"><div><p class="eyebrow">IMMUTABLE DATASET</p><h2>当前状态</h2></div><a class="button" href="/api/v2/dataset/manifest">下载 manifest</a></div><dl class="definition-grid"><dt>生成记录</dt><dd>{{ v2_generated }}</dd><dt>拒绝提案</dt><dd>{{ v2_rejected }}</dd><dt>锚点门禁</dt><dd>{{ '通过' if anchor_gate_passed else '未通过' }}</dd><dt>schema</dt><dd>2.0.0</dd></dl><p class="muted">正式 Parquet 分区只追加。手工设计必须先保存在 workspace，再提交为新的版本化数据集。</p></article></div>
+<section class="surface-card" data-dataset-root>
+  <div class="card-heading"><div><p class="eyebrow">EXPLICIT WORKFLOW</p><h2>geometry-v2.1.0 初始化</h2></div><span class="pill">不会自动生成</span></div>
+  <p class="muted">启动服务只创建空 schema。请按顺序执行三个步骤；每一步都必须由你明确点击。</p>
+  <div class="init-steps">
+    <article class="init-step {{ 'done' if anchor_gate_passed else 'active' }}"><span>1</span><div><h3>拟合 NASA 锚点</h3><p>导入 48 个只读原始截面并生成 48 个统一内核派生拟合。</p><a class="button {{ '' if anchor_gate_passed else 'primary' }}" href="/anchors">{{ '查看拟合结果' if anchor_gate_passed else '前往锚点拟合' }}</a></div></article>
+    <article class="init-step {{ 'done' if v2_generated >= 20000 else ('active' if anchor_gate_passed else '') }}"><span>2</span><div><h3>生成正式叶型</h3><form class="stack-form" data-batch-form><label>目标有效叶型<input name="target_valid" type="number" min="1" max="100000" value="20000"></label><label>并行进程<input name="workers" type="number" min="1" max="64" value="{{ default_workers }}"></label><button class="button primary" type="submit" {{ 'disabled' if not anchor_gate_passed else '' }}>创建或恢复批次</button></form><div class="progress-track"><span data-batch-progress></span></div><p class="result-summary" data-batch-status>{{ '' if anchor_gate_passed else '锚点门禁通过后才可生成。' }}</p></div></article>
+    <article class="init-step {{ 'active' if v2_generated >= 20000 else '' }}"><span>3</span><div><h3>完整审计</h3><p>核对数量、唯一 ID、几何门槛、哈希和确定性重建。</p><a class="button" href="/audit">前往审计</a></div></article>
+  </div>
+</section>
+<section class="surface-card"><div class="card-heading"><div><p class="eyebrow">IMMUTABLE DATASET</p><h2>当前空库 / 数据状态</h2></div>{% if v2_generated %}<a class="button" href="/api/v2/dataset/manifest">下载 manifest</a>{% endif %}</div><dl class="definition-grid"><dt>生成记录</dt><dd>{{ v2_generated }}</dd><dt>拒绝提案</dt><dd>{{ v2_rejected }}</dd><dt>锚点门禁</dt><dd>{{ '通过' if anchor_gate_passed else '未通过' }}</dd><dt>schema</dt><dd>2.1.0</dd></dl><p class="muted">正式 Parquet 分区只追加。手工设计保存在独立 Workspace，不会修改正式数据。</p></section>
 {% endblock %}

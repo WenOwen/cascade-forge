@@ -2,7 +2,7 @@
 {% block page_title %}总览{% endblock %}
 {% block content %}
 <section class="metric-grid">
-  <article class="metric-card"><span>v2 生成叶型</span><strong>{{ v2_generated }}</strong><small>geometry-v2.0.0</small></article>
+  <article class="metric-card"><span>v2 生成叶型</span><strong>{{ v2_generated }}</strong><small>geometry-v2.1.0</small></article>
   <article class="metric-card"><span>NASA 锚点</span><strong>{{ v2_anchors }}</strong><small>只读来源快照</small></article>
   <article class="metric-card"><span>派生拟合</span><strong>{{ v2_fits }}</strong><small>统一内核 48 目标</small></article>
   <article class="metric-card"><span>Workspace</span><strong>{{ workspace_count }}</strong><small>可编辑修订</small></article>
@@ -11,5 +11,5 @@
   <article class="surface-card welcome-card"><p class="eyebrow">GEOMETRY WORKBENCH</p><h2>从工程意图到可追溯叶片曲面</h2><p>统一 B-spline 内核使用中弧线法向加厚、约束最小二乘叶面拟合和端点 G2 密切圆合同。正式数据不可变，手工编辑进入独立 workspace。</p><div class="button-row"><a class="button primary" href="/studio">新建叶型</a><a class="button" href="/database">浏览数据库</a></div></article>
   <article class="surface-card"><div class="card-heading"><div><p class="eyebrow">SYSTEM</p><h2>能力状态</h2></div><span class="pill success">离线可用</span></div><ul class="status-list"><li><span>二维统一内核</span><strong>B-spline G2</strong></li><li><span>LE / TE 半径</span><strong>密切圆</strong></li><li><span>数据接口</span><strong>/api/v2</strong></li><li><span>三维输出</span><strong>GeomTurbo 3.7</strong></li></ul></article>
 </section>
-<section class="surface-card"><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>常用工作流</h2></div></div><div class="action-grid"><a href="/studio"><strong>叶型工作室</strong><span>基础参数、显式控制点、密切圆放大</span></a><a href="/anchors"><strong>NASA 锚点</strong><span>只读审计与 48 个约束拟合</span></a><a href="/blade"><strong>三维叶片</strong><span>表单化 Section Schedule 与 GeomTurbo</span></a><a href="/audit"><strong>完整审计</strong><span>门禁、哈希、几何不变量与重建</span></a></div></section>
+<section class="surface-card"><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>常用工作流</h2></div></div><div class="action-grid"><a href="/studio"><strong>叶型工作室</strong><span>工程参数、后台 Spec JSON、密切圆放大</span></a><a href="/anchors"><strong>NASA 锚点</strong><span>只读审计与 48 个约束拟合</span></a><a href="/blade"><strong>三维叶片</strong><span>表单化 Section Schedule 与 GeomTurbo</span></a><a href="/audit"><strong>完整审计</strong><span>门禁、哈希、几何不变量与重建</span></a></div></section>
 {% endblock %}
