@@ -20,6 +20,16 @@ from .models_v2 import (
     GeometrySpecV2,
     MetalAngleReference,
 )
+from .models_naca65 import (
+    NACA65BenchmarkConfig,
+    NACA65BenchmarkManifest,
+    NACA65Family,
+    NACA65FitReport,
+    NACA65Geometry,
+    NACA65InputMode,
+    NACA65Spec,
+)
+from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
 from .storage_v2 import DatasetStoreV2
 from .validation import validate_profile
@@ -46,6 +56,15 @@ __all__ = [
     "GeometryFeaturesV2",
     "GeometrySpecV2",
     "MetalAngleReference",
+    "NACA65BenchmarkConfig",
+    "NACA65BenchmarkManifest",
+    "NACA65Family",
+    "NACA65FitReport",
+    "NACA65Geometry",
+    "NACA65InputMode",
+    "NACA65Spec",
+    "generate_naca65",
+    "parse_naca65_designation",
 ]
 
 __version__ = "2.1.0"
