@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
+import pyarrow as pa
+import pyarrow.parquet as pq
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -16,18 +18,23 @@ from plotly.offline import get_plotlyjs
 from pydantic import BaseModel, Field
 
 from .audit_v2 import audit_dataset_v2
+from .benchmark_naca65 import run_naca65_benchmark
 from .blade3d import build_blade
 from .features import curve_curvature, extract_features
+from .fitting_naca65 import fit_reference_geometry
 from .fitting_v2 import fit_anchors_to_dataset
 from .geometry2d import generate_profile
 from .geometry_v2 import resolve_geometry_spec
 from .geomturbo import export_geomturbo
 from .jobs import JobManager
 from .models import CascadeContext, GeometrySpec, SectionSchedule
+from .models_naca65 import NACA65BenchmarkConfig, NACA65Spec
 from .models_v2 import GeometrySpecV2
+from .naca65 import generate_naca65
 from .sampling import generate_dataset
 from .sampling_v2 import generate_dataset_v2
 from .storage import DatasetStore
+from .storage_naca65 import NACA65BenchmarkStore
 from .storage_v2 import DatasetStoreV2
 from .validation import validate_profile
 from .workspace import WorkspaceStore
@@ -68,11 +75,18 @@ class AnchorFitRequestV2(BaseModel):
     raw_root: str | None = None
 
 
+class NACA65FitRequest(BaseModel):
+    spec: NACA65Spec
+    max_outer_iterations: int = Field(default=6, ge=1, le=20)
+    max_design_evaluations: int = Field(default=80, ge=10, le=500)
+
+
 def create_app(
     dataset_root: str | Path,
     *,
     v2_dataset_root: str | Path | None = None,
     workspace_root: str | Path | None = None,
+    naca65_dataset_root: str | Path | None = None,
 ) -> FastAPI:
     dataset_root = Path(dataset_root).resolve()
     manifest_path = dataset_root / "dataset_manifest.json"
@@ -101,8 +115,15 @@ def create_app(
         if workspace_root
         else resolved_v2_root.parent / "workspace-v2"
     )
+    resolved_naca65_root = (
+        Path(naca65_dataset_root).resolve()
+        if naca65_dataset_root
+        else resolved_v2_root.parent / "naca65-benchmark-v1.0.0"
+    )
+    naca65_store = NACA65BenchmarkStore(resolved_naca65_root)
     jobs = JobManager(store)
     jobs_v2 = JobManager(store_v2)
+    jobs_naca65 = JobManager(naca65_store)
     templates = Jinja2Templates(directory=str(TEMPLATE_ROOT))
     application = FastAPI(title="Cascade Forge", version="2.1.0")
     application.state.store = store
@@ -110,6 +131,8 @@ def create_app(
     application.state.store_v2 = store_v2
     application.state.workspace = workspace
     application.state.jobs_v2 = jobs_v2
+    application.state.naca65_store = naca65_store
+    application.state.jobs_naca65 = jobs_naca65
     application.state.v2_dataset_root = resolved_v2_root
     application.state.dataset_root = dataset_root
     application.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
@@ -248,6 +271,120 @@ def create_app(
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(422, str(exc)) from exc
         return _geometry_payload(geometry)
+
+    @application.post("/api/v2/naca65/generate")
+    def generate_naca65_api(spec: NACA65Spec) -> dict[str, Any]:
+        try:
+            reference = generate_naca65(spec)
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"reference": reference.model_dump(mode="json")}
+
+    @application.post("/api/v2/naca65/fit")
+    def fit_naca65_api(body: NACA65FitRequest) -> dict[str, Any]:
+        try:
+            reference = generate_naca65(body.spec)
+            report, fitted = fit_reference_geometry(
+                reference,
+                max_outer_iterations=body.max_outer_iterations,
+                max_design_evaluations=body.max_design_evaluations,
+            )
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "reference": reference.model_dump(mode="json"),
+            "fit_report": report.model_dump(mode="json"),
+            "fitted_geometry": fitted.model_dump(mode="json"),
+        }
+
+    @application.post("/api/v2/naca65/benchmarks", status_code=202)
+    def start_naca65_benchmark(
+        body: NACA65BenchmarkConfig,
+    ) -> dict[str, str]:
+        def run() -> dict[str, Any]:
+            return run_naca65_benchmark(
+                body, resolved_naca65_root
+            ).model_dump(mode="json")
+
+        job_id = jobs_naca65.submit(
+            "naca65_benchmark", body.model_dump(mode="json"), run
+        )
+        return {"job_id": job_id, "status": "queued"}
+
+    @application.get("/api/v2/naca65/manifest")
+    def get_naca65_manifest() -> dict[str, Any]:
+        manifest = naca65_store.latest_manifest()
+        if manifest is None:
+            raise HTTPException(404, "NACA 65 基准尚未运行")
+        return manifest.model_dump(mode="json")
+
+    @application.get("/api/v2/naca65/cases")
+    def list_naca65_cases(
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0),
+        status: str | None = None,
+        family: str | None = None,
+        sort: str = "designation",
+        descending: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            items = naca65_store.list_cases(
+                limit=limit,
+                offset=offset,
+                status=status,
+                family=family,
+                sort=sort,
+                descending=descending,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "items": items,
+            "total": naca65_store.count(),
+            "status_distribution": naca65_store.status_distribution(),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    @application.get("/api/v2/naca65/cases/{fit_id}")
+    def get_naca65_case(fit_id: str) -> dict[str, Any]:
+        case = naca65_store.get_case(fit_id)
+        if case is None:
+            raise HTTPException(404, f"找不到 {fit_id}")
+        return case
+
+    @application.get("/api/v2/naca65/cases/{fit_id}/export")
+    def export_naca65_case(fit_id: str, format: str = "csv") -> Response:
+        case = naca65_store.get_case(fit_id)
+        if case is None:
+            raise HTTPException(404, f"找不到 {fit_id}")
+        if format == "json":
+            return JSONResponse(
+                case,
+                headers={"Content-Disposition": f'attachment; filename="{fit_id}.json"'},
+            )
+        rows = _naca65_coordinate_rows(case)
+        if format == "csv":
+            stream = io.StringIO()
+            writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+            return Response(
+                stream.getvalue(),
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{fit_id}.csv"'},
+            )
+        if format == "parquet":
+            stream = pa.BufferOutputStream()
+            pq.write_table(pa.Table.from_pylist(rows), stream, compression="zstd")
+            return Response(
+                stream.getvalue().to_pybytes(),
+                media_type="application/vnd.apache.parquet",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{fit_id}.parquet"'
+                },
+            )
+        raise HTTPException(422, "format 仅支持 csv、json 或 parquet")
 
     @application.post("/api/v2/curves/resolve")
     def resolve_curves_v2(spec: GeometrySpecV2) -> dict[str, Any]:
@@ -483,11 +620,15 @@ def create_app(
 
     @application.get("/api/v2/jobs")
     def list_jobs_v2(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
-        return {"items": store_v2.list_jobs(limit=limit)}
+        items = store_v2.list_jobs(limit=limit) + naca65_store.list_jobs(limit=limit)
+        items.sort(key=lambda item: item["created_at"], reverse=True)
+        return {"items": items[:limit]}
 
     @application.get("/api/v2/jobs/{job_id}")
     def get_job_v2(job_id: str) -> dict[str, Any]:
         job = store_v2.get_job(job_id)
+        if job is None:
+            job = naca65_store.get_job(job_id)
         if job is None:
             raise HTTPException(404, f"找不到 {job_id}")
         return job
@@ -636,10 +777,40 @@ def create_app(
                 "schema_version": "2.1.0",
                 "v1": {"total": store.count()},
                 "v2": {"total": store_v2.count()},
+                "naca65": {"total": naca65_store.count()},
             }
         )
 
     return application
+
+
+def _naca65_coordinate_rows(case: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    reference = case["reference"]
+    fitted = case.get("fitted_geometry")
+    sources = [
+        ("native", "suction", reference["normalized_suction"]),
+        ("native", "pressure", reference["normalized_pressure"]),
+    ]
+    if fitted:
+        sources.extend(
+            [
+                ("bspline_fit", "suction", fitted["suction"]),
+                ("bspline_fit", "pressure", fitted["pressure"]),
+            ]
+        )
+    for source, side, coordinates in sources:
+        for index, (x_value, y_value) in enumerate(coordinates):
+            rows.append(
+                {
+                    "source": source,
+                    "side": side,
+                    "point": index,
+                    "x_over_c": x_value,
+                    "y_over_c": y_value,
+                }
+            )
+    return rows
 
 
 def _default_spec() -> GeometrySpec:

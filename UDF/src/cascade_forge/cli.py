@@ -9,18 +9,25 @@ import typer
 
 from .audit import audit_dataset
 from .audit_v2 import audit_dataset_v2
+from .benchmark_naca65 import run_naca65_benchmark
 from .blade3d import build_blade
+from .fitting_naca65 import fit_reference_geometry
 from .fitting_v2 import fit_anchors_to_dataset
 from .geomturbo import export_geomturbo
 from .legacy import ingest_legacy_anchors, legacy_section_schedule
 from .models import SectionSchedule
+from .models_naca65 import NACA65BenchmarkConfig, NACA65Family, NACA65Spec
+from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
 from .sampling_v2 import generate_dataset_v2
 from .storage import DatasetStore
+from .storage_naca65 import NACA65BenchmarkStore
 from .storage_v2 import DatasetStoreV2
 from .workspace import WorkspaceStore
 
 app = typer.Typer(help="Cascade Forge 叶型几何数据库")
+naca65_app = typer.Typer(help="NACA 65/65A 原生生成与 B-spline 拟合")
+app.add_typer(naca65_app, name="naca65")
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PACKAGE_ROOT / "configs" / "geometry-v1.0.0.yaml"
 DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.1.0.yaml"
@@ -150,6 +157,7 @@ def serve_command(
     dataset: Annotated[Path, typer.Option()],
     v2_dataset: Annotated[Path | None, typer.Option()] = None,
     workspace: Annotated[Path | None, typer.Option()] = None,
+    naca65_dataset: Annotated[Path | None, typer.Option()] = None,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8000,
 ) -> None:
@@ -158,7 +166,12 @@ def serve_command(
     from .web import create_app
 
     uvicorn.run(
-        create_app(dataset, v2_dataset_root=v2_dataset, workspace_root=workspace),
+        create_app(
+            dataset,
+            v2_dataset_root=v2_dataset,
+            workspace_root=workspace,
+            naca65_dataset_root=naca65_dataset,
+        ),
         host=host,
         port=port,
     )
@@ -189,6 +202,174 @@ def workspace_import_command(
 ) -> None:
     design_id = WorkspaceStore(workspace).import_design(source)
     typer.echo(design_id)
+
+
+@naca65_app.command("generate")
+def naca65_generate_command(
+    family: Annotated[str, typer.Option()] = "65",
+    thickness_ratio: Annotated[float, typer.Option(min=0.03, max=0.18)] = 0.10,
+    design_lift_coefficient: Annotated[float, typer.Option(min=0.0, max=2.0)] = 0.8,
+    loading_parameter_a: Annotated[float, typer.Option(min=0.0, max=1.0)] = 0.8,
+    preset: Annotated[str | None, typer.Option()] = None,
+    destination: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    spec = _naca65_spec(
+        family,
+        thickness_ratio,
+        design_lift_coefficient,
+        loading_parameter_a,
+        preset,
+    )
+    geometry = generate_naca65(spec)
+    payload = geometry.model_dump_json(indent=2)
+    if destination:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(payload, encoding="utf-8")
+        typer.echo(str(destination.resolve()))
+    else:
+        typer.echo(payload)
+
+
+@naca65_app.command("fit")
+def naca65_fit_command(
+    family: Annotated[str, typer.Option()] = "65",
+    thickness_ratio: Annotated[float, typer.Option(min=0.03, max=0.18)] = 0.10,
+    design_lift_coefficient: Annotated[float, typer.Option(min=0.0, max=2.0)] = 0.8,
+    loading_parameter_a: Annotated[float, typer.Option(min=0.0, max=1.0)] = 0.8,
+    preset: Annotated[str | None, typer.Option()] = None,
+    destination: Annotated[Path | None, typer.Option()] = None,
+    max_outer_iterations: Annotated[int, typer.Option(min=1, max=20)] = 6,
+    max_design_evaluations: Annotated[int, typer.Option(min=10, max=500)] = 80,
+) -> None:
+    reference = generate_naca65(
+        _naca65_spec(
+            family,
+            thickness_ratio,
+            design_lift_coefficient,
+            loading_parameter_a,
+            preset,
+        )
+    )
+    report, fitted = fit_reference_geometry(
+        reference,
+        max_outer_iterations=max_outer_iterations,
+        max_design_evaluations=max_design_evaluations,
+    )
+    payload = json.dumps(
+        {
+            "reference": reference.model_dump(mode="json"),
+            "fit_report": report.model_dump(mode="json"),
+            "fitted_geometry": fitted.model_dump(mode="json"),
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+    if destination:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(payload, encoding="utf-8")
+        typer.echo(str(destination.resolve()))
+    else:
+        typer.echo(payload)
+
+
+@naca65_app.command("benchmark")
+def naca65_benchmark_command(
+    output: Annotated[Path, typer.Option()],
+    max_outer_iterations: Annotated[int, typer.Option(min=1, max=20)] = 6,
+    max_design_evaluations: Annotated[int, typer.Option(min=10, max=500)] = 80,
+) -> None:
+    config = NACA65BenchmarkConfig(
+        max_outer_iterations=max_outer_iterations,
+        max_design_evaluations=max_design_evaluations,
+    )
+
+    def progress(state: dict[str, int]) -> None:
+        typer.echo(f"completed={state['completed']}/{state['total']} stored={state['stored']}")
+
+    manifest = run_naca65_benchmark(config, output, progress=progress)
+    typer.echo(manifest.model_dump_json(indent=2))
+
+
+@naca65_app.command("export")
+def naca65_export_command(
+    fit_id: str,
+    dataset: Annotated[Path, typer.Option(exists=True, file_okay=False)],
+    destination: Annotated[Path, typer.Option()],
+) -> None:
+    case = NACA65BenchmarkStore(dataset).get_case(fit_id)
+    if case is None:
+        raise typer.BadParameter(f"找不到 {fit_id}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    suffix = destination.suffix.lower()
+    if suffix == ".json":
+        destination.write_text(
+            json.dumps(case, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    else:
+        rows = _naca65_coordinate_rows(case)
+        if suffix == ".parquet":
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+
+            pq.write_table(pa.Table.from_pylist(rows), destination, compression="zstd")
+        elif suffix == ".csv":
+            with destination.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+        else:
+            raise typer.BadParameter("destination 扩展名必须为 .csv、.json 或 .parquet")
+    typer.echo(str(destination.resolve()))
+
+
+def _naca65_spec(
+    family: str,
+    thickness_ratio: float,
+    design_lift_coefficient: float,
+    loading_parameter_a: float,
+    preset: str | None,
+) -> NACA65Spec:
+    if preset:
+        return parse_naca65_designation(preset)
+    try:
+        selected_family = NACA65Family(family.upper())
+    except ValueError as exc:
+        raise typer.BadParameter("family 仅支持 65 或 65A") from exc
+    if selected_family == NACA65Family.SERIES_65A:
+        loading_parameter_a = 0.8
+    return NACA65Spec(
+        family=selected_family,
+        thickness_ratio=thickness_ratio,
+        design_lift_coefficient=design_lift_coefficient,
+        loading_parameter_a=loading_parameter_a,
+    )
+
+
+def _naca65_coordinate_rows(case: dict) -> list[dict]:
+    reference = case["reference"]
+    fitted = case.get("fitted_geometry")
+    sources = [
+        ("native", "suction", reference["normalized_suction"]),
+        ("native", "pressure", reference["normalized_pressure"]),
+    ]
+    if fitted:
+        sources.extend(
+            [
+                ("bspline_fit", "suction", fitted["suction"]),
+                ("bspline_fit", "pressure", fitted["pressure"]),
+            ]
+        )
+    return [
+        {
+            "source": source,
+            "side": side,
+            "point": index,
+            "x_over_c": point[0],
+            "y_over_c": point[1],
+        }
+        for source, side, coordinates in sources
+        for index, point in enumerate(coordinates)
+    ]
 
 
 def _open_store(dataset: Path):

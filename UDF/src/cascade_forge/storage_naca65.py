@@ -294,3 +294,11 @@ class NACA65BenchmarkStore:
         record["created_at"] = str(record["created_at"])
         record["updated_at"] = str(record["updated_at"])
         return record
+
+    def list_jobs(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
+            rows = connection.execute(
+                "SELECT job_id FROM jobs_naca65 ORDER BY created_at DESC LIMIT ?",
+                [max(1, min(limit, 1000))],
+            ).fetchall()
+        return [job for row in rows if (job := self.get_job(row[0])) is not None]
