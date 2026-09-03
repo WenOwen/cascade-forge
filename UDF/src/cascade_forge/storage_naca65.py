@@ -13,11 +13,12 @@ import pyarrow.parquet as pq
 
 from .models import file_sha256
 from .models_naca65 import (
+    NACA65_BENCHMARK_VERSION,
     NACA65BenchmarkManifest,
+    NACA65FitGeometry,
     NACA65FitReport,
     NACA65Geometry,
 )
-from .models_v2 import AirfoilGeometryV2
 
 
 class NACA65BenchmarkStore:
@@ -28,6 +29,13 @@ class NACA65BenchmarkStore:
 
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
+        manifest_path = self.root / "benchmark_manifest.json"
+        if manifest_path.exists():
+            version = json.loads(manifest_path.read_text(encoding="utf-8"))["benchmark_version"]
+            if version != NACA65_BENCHMARK_VERSION:
+                raise ValueError(
+                    f"旧基准 {version} 保留只读；请使用 naca65-benchmark-v2.0.0 新目录"
+                )
         self.case_dir = self.root / "tables" / "cases"
         self.run_dir = self.root / "runs"
         self.case_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +102,7 @@ class NACA65BenchmarkStore:
         self,
         reference: NACA65Geometry,
         report: NACA65FitReport,
-        fitted: AirfoilGeometryV2 | None,
+        fitted: NACA65FitGeometry | None,
     ) -> Path | None:
         if report.fit_id in self.fit_ids():
             return None

@@ -11,15 +11,16 @@
 {%- endmacro %}
 {% block title %}NACA 65 实验室 · Cascade Forge{% endblock %}
 {% block page_title %}NACA 65 实验室{% endblock %}
-{% block extra_scripts %}<script src="/static/naca65.js?v=1.0" defer></script>{% endblock %}
+{% block extra_scripts %}<script src="/static/naca65.js?v=2.0" defer></script>{% endblock %}
 {% block toolbar_actions %}<button class="button" type="button" data-naca-refresh>刷新基准</button><button class="button primary" type="button" data-naca-run-benchmark>运行 / 恢复 36 型</button>{% endblock %}
 {% block content %}
 <div class="naca-lab" data-naca-root data-existing-count="{{ naca65_count }}">
+  <p class="field-help">法向分解 v2：真实中弧线 + 共享厚度，叶面直接由 C ± t·n 生成。旧 v1 基准因分解与距离评估问题仅保留归档，不与新版数值直接比较。</p>
   <section class="naca-workbench">
     <aside class="surface-card naca-inspector">
       <p class="eyebrow">NASA SIXSERIES · 1974</p>
       <h2>原生截面</h2>
-      <p class="field-help">共形映射厚度 · a 型中弧线 · 沿法线叠加。原始坐标与 OpenVSP 兼容闭合坐标同时保留。</p>
+      <p class="field-help">保留 sixseries 原始构造站位、中弧线与厚度；独立叶面重采样只用于显示。拟合采用共享法向厚度，不再单独拟合两张叶面。</p>
       <form data-naca-form class="inspector-form">
         <fieldset>
           <legend>输入方式</legend>
@@ -40,7 +41,8 @@
 
     <div class="naca-results">
       <article class="surface-card canvas-card">
-        <div class="card-heading"><div><p class="eyebrow">NATIVE ↔ UNIFIED B-SPLINE G2</p><h2 data-naca-designation>NACA 65-810</h2></div><div class="button-row"><span class="pill" data-naca-fit-state>等待计算</span><button class="icon-button" type="button" data-naca-reset-view title="重置视图">↺</button></div></div>
+        <div class="card-heading"><div><p class="eyebrow">TRUE MEAN LINE · LINKED NORMAL OFFSET</p><h2 data-naca-designation>NACA 65-810</h2></div><div class="button-row"><span class="pill" data-naca-fit-state>等待计算</span><button class="icon-button" type="button" data-naca-reset-view title="重置视图">↺</button></div></div>
+        <label class="naca-normal-toggle"><input type="checkbox" data-naca-normals checked> 显示同一中弧线站位的法向厚度连线</label>
         <div class="chart-frame naca-profile-frame"><div id="naca-profile-chart" class="plotly-chart" data-empty="生成后显示完整轮廓"></div></div>
         <div class="geometry-meta"><code data-naca-native-id>—</code><code data-naca-geometry-id>—</code></div>
       </article>
@@ -48,8 +50,9 @@
         <article class="metric-card"><span>全轮廓 RMS</span><strong data-metric="rms">—</strong><small>有效门槛 5×10⁻⁴c</small></article>
         <article class="metric-card"><span>最大距离</span><strong data-metric="max">—</strong><small>有效门槛 2×10⁻³c</small></article>
         <article class="metric-card"><span>核心区 RMS</span><strong data-metric="core-rms">—</strong><small>0.02 ≤ x/c ≤ 0.98</small></article>
-        <article class="metric-card"><span>Hausdorff 近似</span><strong data-metric="hausdorff">—</strong><small>双向最近点</small></article>
+        <article class="metric-card"><span>Hausdorff 近似</span><strong data-metric="hausdorff">—</strong><small>双向点到加密轮廓线段</small></article>
       </div>
+      <article class="surface-card"><h2>法向分解校验</h2><p class="field-help">t(s)=√s(1−s)B(s)，s 为原生中弧线归一化弧长。前缘半径由极限曲率推导；尾缘是尖尾缘，不伪造圆弧。</p><dl class="definition-grid naca-invariants"><dt>中点与中弧线偏差</dt><dd data-invariant="midpoint_error_max">—</dd><dt>法向正交误差</dt><dd data-invariant="normal_offset_error_max">—</dd><dt>中弧线 RMS</dt><dd data-invariant="camber_rms_distance_ratio">—</dd><dt>半厚度 RMS</dt><dd data-invariant="half_thickness_rms_ratio">—</dd></dl><div id="naca-thickness-chart" class="plotly-chart naca-error-chart"></div><details><summary>模型限制与端区说明</summary><ul data-naca-warnings></ul></details></article>
       <article class="surface-card"><div class="card-heading"><div><p class="eyebrow">SIGNED NORMAL DEVIATION</p><h2>叶面拟合误差</h2></div><span class="pill" data-naca-status>—</span></div><div id="naca-error-chart" class="plotly-chart naca-error-chart"></div></article>
       <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span class="mono-value" data-naca-le>—</span></div><div id="naca-le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span class="mono-value" data-naca-te>—</span></div><div id="naca-te-chart" class="plotly-chart edge-chart"></div></article></div>
       <article class="surface-card"><div class="card-heading"><h2>几何特征偏差</h2><span class="field-help">B-spline − NACA 原生</span></div><div class="table-scroll"><table class="data-table"><thead><tr><th>特征</th><th>偏差</th></tr></thead><tbody data-naca-feature-deltas><tr><td colspan="2" class="empty-state">拟合后显示</td></tr></tbody></table></div></article>

@@ -33,6 +33,9 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
         assert page.status_code == 200
         assert "NACA 65 实验室" in page.text
         assert "naca65.js" in page.text
+        assert "法向分解校验" in page.text
+        assert "data-naca-normals" in page.text
+        assert "data-invariant=\"midpoint_error_max\"" in page.text
 
         parsed = client.post(
             "/api/v2/naca65/presets/parse", json={"designation": "65-(12)10"}
@@ -55,7 +58,10 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
             },
         )
         assert fitted.status_code == 200
-        assert fitted.json()["fit_report"]["geometry_id"].startswith("geo_v2_")
+        assert fitted.json()["fit_report"]["geometry_id"].startswith("geo_naca_normal_")
+        assert fitted.json()["fit_report"]["diagnostics"]["midpoint_error_max"] < 1e-10
+        assert fitted.json()["fit_report"]["diagnostics"]["normal_offset_error_max"] < 1e-10
+        assert fitted.json()["fitted_geometry"]["trailing_osculating_circle"] == []
 
         config = NACA65BenchmarkConfig(
             thickness_ratios=(0.10,),
@@ -87,5 +93,6 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
         manifest = client.get("/api/v2/naca65/manifest")
         assert manifest.status_code == 200
         assert manifest.json()["total_cases"] == 2
+        assert manifest.json()["benchmark_version"] == "naca65-benchmark-2.0.0"
         jobs = client.get("/api/v2/jobs").json()["items"]
         assert any(item["job_id"] == job["job_id"] for item in jobs)

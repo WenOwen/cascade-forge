@@ -118,6 +118,7 @@
     node.className = `pill ${state}`;
     $("[data-naca-error]", root).textContent = "";
     $("[data-naca-fit]", root).disabled = state === "running";
+    $("[data-naca-generate]", root).disabled = state === "running";
   }
 
   function reject(error) {
@@ -140,10 +141,16 @@
         { ...xy(fitted.pressure), mode: "lines", name: "B-spline PS", line: { color: colors.orange, width: 1.8, dash: "dash" } },
         { ...xy(fitted.camber), mode: "lines", name: "B-spline 中弧线", line: { color: colors.green, dash: "dashdot" } }
       );
+      const crossSections = [];
+      for (let i = 10; i < fitted.camber.length - 10; i += 10) {
+        crossSections.push(fitted.pressure[i], fitted.camber[i], fitted.suction[i], [null, null]);
+      }
+      traces.push({ ...xy(crossSections), mode: "lines", name: "法向厚度连线", hoverinfo: "skip",
+        line: { color: "#b4c5ba", width: 1 }, visible: $("[data-naca-normals]", root).checked });
     }
     charts.render("naca-profile-chart", traces, {
-      xaxis: { title: "轴向 x/c", constrain: "domain", zeroline: false },
-      yaxis: { title: "切向 y/c", scaleanchor: "x", scaleratio: 1, zeroline: false },
+      xaxis: { title: { text: "轴向 x/c（γ=0°）" }, constrain: "domain", zeroline: false },
+      yaxis: { title: { text: "切向 y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false },
       uirevision: `${reference.native_id}:${fitted?.geometry_id || "native"}`
     });
     $("[data-naca-designation]", root).textContent = reference.designation;
@@ -152,6 +159,14 @@
     renderMetrics(payload.fit_report);
     renderErrors(reference, payload.fit_report);
     renderEdges(reference, fitted);
+    $$('[data-invariant]', root).forEach(node => {
+      node.textContent = scientific(payload.fit_report?.diagnostics?.[node.dataset.invariant]);
+    });
+    $("[data-naca-warnings]", root).innerHTML = (payload.fit_report?.warnings || []).map(w => `<li>${escapeHTML(w)}</li>`).join("");
+    const sample = reference.parameter;
+    const thicknessTraces = [{ x: sample, y: reference.thickness.map(t => t / 2), name: "原生半厚度", mode: "lines", line: { color: colors.ink } }];
+    if (fitted) thicknessTraces.push({ x: fitted.parameter, y: fitted.thickness.map(t => t / 2), name: "共享 B-spline 半厚度", mode: "lines", line: { color: colors.green, dash: "dash" } });
+    charts.render("naca-thickness-chart", thicknessTraces, { xaxis: { title: { text: "中弧线弧长 s" } }, yaxis: { title: { text: "半厚度 t/c" } } });
   }
 
   function renderMetrics(report) {
@@ -170,12 +185,12 @@
   }
 
   function renderErrors(reference, report) {
-    const x = reference.camber.map(point => point[0]);
+    const x = report?.error_parameter || [];
     const traces = report ? [
       { x, y: report.suction_signed_normal_error, mode: "lines", name: "吸力面", line: { color: colors.blue } },
       { x, y: report.pressure_signed_normal_error, mode: "lines", name: "压力面", line: { color: colors.orange } }
     ] : [];
-    charts.render("naca-error-chart", traces, { xaxis: { title: "轴向 x/c", zeroline: false }, yaxis: { title: "有符号法向误差 / c", zeroline: true } });
+    charts.render("naca-error-chart", traces, { xaxis: { title: { text: "叶面归一化弧长" }, zeroline: false }, yaxis: { title: { text: "外向叶面法向误差 / c" }, zeroline: true } });
   }
 
   function renderEdges(reference, fitted) {
@@ -189,16 +204,21 @@
       if (fitted) {
         traces.push(
           { ...xy(select(fitted.suction)), mode: "lines", name: "拟合 SS", line: { color: colors.blue, dash: "dash" } },
-          { ...xy(select(fitted.pressure)), mode: "lines", name: "拟合 PS", line: { color: colors.orange, dash: "dash" } },
-          { ...xy(fitted[`${edge}_osculating_circle`]), mode: "lines", name: "拟合密切圆", line: { color: colors.red, dash: "dot" } }
+          { ...xy(select(fitted.pressure)), mode: "lines", name: "拟合 PS", line: { color: colors.orange, dash: "dash" } }
         );
+        const circle = fitted[`${edge}_osculating_circle`];
+        if (circle?.length) {
+          traces.push({ ...xy(circle), mode: "lines", name: "极限密切圆", line: { color: colors.red, dash: "dot" } });
+          traces.push({ ...xy([fitted.metadata.leading_edge_center]), mode: "markers", name: "圆心", marker: { color: colors.red, symbol: "cross", size: 7 } });
+        }
+        traces.push({ ...xy([isLeading ? fitted.camber[0] : fitted.camber.at(-1)]), mode: "markers", name: isLeading ? "鼻点" : "尖尾缘", marker: { color: colors.ink, size: 6 } });
       }
-      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: "x/c", zeroline: false }, yaxis: { title: "y/c", scaleanchor: "x", scaleratio: 1, zeroline: false }, legend: { orientation: "h", y: 1.08 } });
+      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: { text: "x/c" }, zeroline: false }, yaxis: { title: { text: "y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false }, legend: { orientation: "h", y: 1.08 } });
     };
     render("leading", true);
     render("trailing", false);
     $("[data-naca-le]", root).textContent = fitted ? `r/c = ${fitted.edge_metrics.leading_edge_radius_ratio.toExponential(4)}` : "—";
-    $("[data-naca-te]", root).textContent = fitted ? `r/c = ${fitted.edge_metrics.trailing_edge_radius_ratio.toExponential(4)}` : "—";
+    $("[data-naca-te]", root).textContent = fitted ? "尖尾缘 · r/c = 0" : "—";
   }
 
   async function loadCases() {
@@ -221,6 +241,10 @@
     $("[data-summary='warning']", root).textContent = distribution.warning || 0;
     $("[data-summary='rejected']", root).textContent = (distribution.rejected || 0) + (distribution.failed || 0);
     $("[data-naca-progress]", root).style.width = `${Math.min(100, data.total / 36 * 100)}%`;
+    const state = $("[data-naca-job-state]", root);
+    if (!state.classList.contains("running")) {
+      state.textContent = data.total >= 36 ? "36 型已保存" : data.total ? "部分结果已保存" : "未运行";
+    }
   }
 
   function renderCaseTable(items) {
@@ -230,6 +254,7 @@
         const detail = await fetchJSON(`/api/v2/naca65/cases/${encodeURIComponent(row.dataset.fitId)}`);
         currentPayload = { reference: detail.reference, fit_report: detail.fit_report, fitted_geometry: detail.fitted_geometry };
         renderResult(currentPayload);
+        setBusy("拟合完成", detail.fit_report.fit_status);
         root.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) { notice(error.message, true); }
     }));
@@ -242,7 +267,7 @@
       const row = items.find(item => Number(item.design_lift_coefficient) === lift && `${item.family} · a=${Number(item.loading_parameter_a).toFixed(1)} · t=${Number(item.thickness_ratio).toFixed(2)}` === label);
       return row?.rms_distance_ratio ?? null;
     }));
-    charts.render("naca-heatmap-chart", [{ type: "heatmap", x: xLabels, y: yValues, z, colorscale: "Blues", colorbar: { title: "RMS/c" }, hovertemplate: "%{x}<br>Clᵢ=%{y}<br>RMS=%{z:.3e}<extra></extra>" }], { margin: { l: 48, r: 20, t: 20, b: 120 }, xaxis: { tickangle: -45 }, yaxis: { title: "Clᵢ" } });
+    charts.render("naca-heatmap-chart", [{ type: "heatmap", x: xLabels, y: yValues, z, colorscale: "Blues", colorbar: { title: { text: "RMS/c" } }, hovertemplate: "%{x}<br>Clᵢ=%{y}<br>RMS=%{z:.3e}<extra></extra>" }], { margin: { l: 48, r: 20, t: 20, b: 120 }, xaxis: { tickangle: -45 }, yaxis: { title: { text: "Clᵢ" } } });
   }
 
   async function runBenchmark() {
@@ -284,6 +309,9 @@
     if (chart?._fullLayout) Plotly.relayout(chart, { "xaxis.autorange": true, "yaxis.autorange": true });
   });
   pairControls();
+  $("[data-naca-normals]", root).addEventListener("change", () => {
+    if (currentPayload) renderResult(currentPayload);
+  });
   updateFamily();
   setMode("general");
   generateOnly();
