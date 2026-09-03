@@ -33,9 +33,7 @@ def parse_naca65_designation(designation: str) -> NACA65Spec:
     compact = re.sub(r"\s+", "", designation.upper()).removeprefix("NACA")
     match = re.fullmatch(r"65-(?:\((\d{2})\)|(\d))(\d{2})", compact)
     if not match:
-        raise ValueError(
-            "压气机编号应为 65-010、65-410、65-810 或 65-(12)10 形式"
-        )
+        raise ValueError("压气机编号应为 65-010、65-410、65-810 或 65-(12)10 形式")
     lift_digits = match.group(1) or match.group(2)
     thickness_percent = int(match.group(3))
     return NACA65Spec(
@@ -53,12 +51,21 @@ def generate_naca65(spec: NACA65Spec | str) -> NACA65Geometry:
 
     if isinstance(spec, str):
         spec = parse_naca65_designation(spec)
-    raw_suction, raw_pressure = _sixseries_coordinates(spec)
+    raw_suction, raw_pressure, native_camber, native_half, native_normals = _sixseries_construction(
+        spec
+    )
     normalized_suction, normalized_pressure = _normalize_and_resample(
         raw_suction, raw_pressure, spec.points_per_side
     )
-    camber = 0.5 * (normalized_suction + normalized_pressure)
-    thickness = np.linalg.norm(normalized_suction - normalized_pressure, axis=1)
+    # Keep the original paired construction stations. Equal *surface* arc fractions
+    # are not corresponding normal feet and must never define a mean line.
+    parameter = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(native_camber, axis=0), axis=1))]
+    parameter /= parameter[-1]
+    sample = 0.5 * (1.0 - np.cos(np.linspace(0.0, math.pi, spec.points_per_side)))
+    camber = np.column_stack(
+        [_bessel_interpolate(parameter, native_camber[:, axis], sample) for axis in range(2)]
+    )
+    thickness = 2 * _bessel_interpolate(parameter, native_half, sample)
     raw_gap = float(np.linalg.norm(raw_suction[-1] - raw_pressure[-1]))
     return NACA65Geometry(
         native_id=spec.native_id,
@@ -70,6 +77,11 @@ def generate_naca65(spec: NACA65Spec | str) -> NACA65Geometry:
         normalized_pressure=normalized_pressure.tolist(),
         camber=camber.tolist(),
         thickness=thickness.tolist(),
+        construction_camber=native_camber.tolist(),
+        construction_half_thickness=native_half.tolist(),
+        construction_normals=native_normals.tolist(),
+        construction_parameter=parameter.tolist(),
+        parameter=sample.tolist(),
         source_provenance=SOURCE_PROVENANCE,
         metadata={
             "raw_points_per_side": len(raw_suction),
@@ -77,11 +89,18 @@ def generate_naca65(spec: NACA65Spec | str) -> NACA65Geometry:
             "raw_trailing_edge_gap_ratio": raw_gap,
             "trailing_edge_policy": "raw-preserved; openvsp-compatible shared endpoint",
             "thickness_application": "normal-to-mean-line",
+            "decomposition_version": "sixseries-stations-v2",
+            "surface_resampling": "display-only; independent of construction stations",
+            "65a_tail_rule": "native straight-tail override retained in raw reference only",
         },
     )
 
 
 def _sixseries_coordinates(spec: NACA65Spec) -> tuple[np.ndarray, np.ndarray]:
+    return _sixseries_construction(spec)[:2]
+
+
+def _sixseries_construction(spec: NACA65Spec) -> tuple[np.ndarray, ...]:
     family_a = spec.family == NACA65Family.SERIES_65A
     tables = load_tables()
     phi_grid = np.linspace(0.0, math.pi, 201)
@@ -89,9 +108,7 @@ def _sixseries_coordinates(spec: NACA65Spec) -> tuple[np.ndarray, np.ndarray]:
     psi_name = "phps65a" if family_a else "phps65"
     eps = _bessel_interpolate(*tables[eps_name], phi_grid)
     psi = _bessel_interpolate(*tables[psi_name], phi_grid)
-    xt, yt, _, _ = _thickness_distribution(
-        phi_grid[:-1], eps[:-1], psi[:-1], spec.thickness_ratio
-    )
+    xt, yt, _, _ = _thickness_distribution(phi_grid[:-1], eps[:-1], psi[:-1], spec.thickness_ratio)
     stations = _sixseries_stations()
     half_thickness = _bessel_interpolate(xt, yt, stations)
     camber, camber_slope, _ = _mean_line(
@@ -122,7 +139,13 @@ def _sixseries_coordinates(spec: NACA65Spec) -> tuple[np.ndarray, np.ndarray]:
             intercept = -slope
             surface[pivot:, 1] = slope * surface[pivot:, 0] + intercept
 
-    return suction, pressure
+    return (
+        suction,
+        pressure,
+        np.column_stack([stations, camber]),
+        half_thickness,
+        np.column_stack([-sin_theta, cos_theta]),
+    )
 
 
 def _thickness_distribution(
@@ -168,21 +191,14 @@ def _thickness_distribution(
         # original leading-edge regularization.
         j = 10
         cn = 2.0 * ytp[j] - yt[j] / xt[j] + 0.1
-        an = xt[j] * (ytp[j] * xt[j] - yt[j]) / (
-            xt[j] * (2.0 * ytp[j] - cn) - yt[j]
-        )
-        bn = math.sqrt(
-            (yt[j] - cn * xt[j]) ** 2 / (1.0 - (xt[j] - an) ** 2 / an**2)
-        )
+        an = xt[j] * (ytp[j] * xt[j] - yt[j]) / (xt[j] * (2.0 * ytp[j] - cn) - yt[j])
+        bn = math.sqrt((yt[j] - cn * xt[j]) ** 2 / (1.0 - (xt[j] - an) ** 2 / an**2))
         for index in range(10):
             root = max(0.0, 1.0 - (xt[index] - an) ** 2 / an**2)
             yt[index] = bn * math.sqrt(root) + cn * xt[index]
             if xt[index] > 1e-11:
-                ytp[index] = (
-                    bn**2 * (an - xt[index]) / an**2 / (yt[index] - cn * xt[index])
-                    + cn
-                )
-                ytpp[index] = -bn**4 / an**2 / (yt[index] - cn * xt[index]) ** 3
+                ytp[index] = bn**2 * (an - xt[index]) / an**2 / (yt[index] - cn * xt[index]) + cn
+                ytpp[index] = -(bn**4) / an**2 / (yt[index] - cn * xt[index]) ** 3
     return xt, yt, ytp, ytpp
 
 
@@ -206,10 +222,7 @@ def _mean_line(
         g, h, q = 0.0, 0.0, 0.0
     else:
         g = -(a * a * (0.5 * math.log(a) - 0.25) + 0.25) / (1.0 - a)
-        h = (
-            0.5 * (1.0 - a) ** 2 * math.log(1.0 - a)
-            - 0.25 * (1.0 - a) ** 2
-        ) / (1.0 - a) + g
+        h = (0.5 * (1.0 - a) ** 2 * math.log(1.0 - a) - 0.25 * (1.0 - a) ** 2) / (1.0 - a) + g
         q = 1.0
 
     factor = design_lift / math.pi / (a + 1.0) / 2.0
@@ -223,17 +236,9 @@ def _mean_line(
         z, _, _ = _mean_line_z(probe, a)
         derivative_probe = max(0.005, probe)
         _, z1, z2 = _mean_line_z(derivative_probe, a)
-        y[index] = factor * (
-            z / (1.0 - q * a) - probe * math.log(probe) + g - h * probe
-        )
-        slope[index] = factor * (
-            z1 / (1.0 - q * a) - 1.0 - math.log(derivative_probe) - h
-        )
-        second[index] = (
-            0.0
-            if probe <= 0.005
-            else factor * (z2 / (1.0 - q * a) - 1.0 / probe)
-        )
+        y[index] = factor * (z / (1.0 - q * a) - probe * math.log(probe) + g - h * probe)
+        slope[index] = factor * (z1 / (1.0 - q * a) - 1.0 - math.log(derivative_probe) - h)
+        second[index] = 0.0 if probe <= 0.005 else factor * (z2 / (1.0 - q * a) - 1.0 / probe)
     y[-1] = 0.0
 
     if modified:
@@ -260,36 +265,15 @@ def _mean_line_z(x: float, a: float) -> tuple[float, float, float]:
     omx = 1.0 - x
     am_log = amx * math.log(abs(amx)) if abs(amx) > tiny else 0.0
     om_log = omx * math.log(omx)
-    z = (
-        0.5 * amx * am_log
-        - 0.5 * omx * om_log
-        - 0.25 * amx**2
-        + 0.25 * omx**2
-    )
+    z = 0.5 * amx * am_log - 0.5 * omx * om_log - 0.25 * amx**2 + 0.25 * omx**2
     if abs(amx) <= tiny:
-        z1 = (
-            -0.5 * omx * (-math.log(omx) - 1.0)
-            + 0.5 * omx * math.log(omx)
-            - 0.5 * omx
-        )
+        z1 = -0.5 * omx * (-math.log(omx) - 1.0) + 0.5 * omx * math.log(omx) - 0.5 * omx
         z2 = -math.log(omx) - 0.5
     else:
         am_log_derivative = -math.log(abs(amx)) - 1.0
         om_log_derivative = -math.log(omx) - 1.0
-        z1 = 0.5 * (
-            amx * am_log_derivative
-            - am_log
-            - omx * om_log_derivative
-            + om_log
-            + amx
-            - omx
-        )
-        z2 = (
-            0.5 * amx / amx
-            - am_log_derivative
-            - 0.5 * omx / omx
-            + om_log_derivative
-        )
+        z1 = 0.5 * (amx * am_log_derivative - am_log - omx * om_log_derivative + om_log + amx - omx)
+        z2 = 0.5 * amx / amx - am_log_derivative - 0.5 * omx / omx + om_log_derivative
     return z, z1, z2
 
 
@@ -318,15 +302,11 @@ def _bessel_interpolate(x: np.ndarray, y: np.ndarray, target: np.ndarray) -> np.
     h = np.diff(x)
     delta = np.diff(y) / h
     derivatives = np.empty_like(y)
-    derivatives[0] = (-h[0] / (h[0] + h[1])) * delta[1] + (
-        1.0 + h[0] / (h[0] + h[1])
-    ) * delta[0]
+    derivatives[0] = (-h[0] / (h[0] + h[1])) * delta[1] + (1.0 + h[0] / (h[0] + h[1])) * delta[0]
     derivatives[-1] = (-h[-1] / (h[-1] + h[-2])) * delta[-2] + (
         1.0 + h[-1] / (h[-1] + h[-2])
     ) * delta[-1]
-    derivatives[1:-1] = (
-        h[1:] * delta[:-1] + h[:-1] * delta[1:]
-    ) / (h[:-1] + h[1:])
+    derivatives[1:-1] = (h[1:] * delta[:-1] + h[:-1] * delta[1:]) / (h[:-1] + h[1:])
     return np.asarray(CubicHermiteSpline(x, y, derivatives)(target), dtype=float)
 
 

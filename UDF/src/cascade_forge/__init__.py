@@ -16,10 +16,12 @@ from .models_naca65 import (
     NACA65BenchmarkConfig,
     NACA65BenchmarkManifest,
     NACA65Family,
+    NACA65FitGeometry,
     NACA65FitReport,
     NACA65Geometry,
     NACA65InputMode,
     NACA65Spec,
+    NACA65SplineSpec,
 )
 from .models_v2 import (
     AirfoilGeometryV2,
@@ -32,6 +34,7 @@ from .models_v2 import (
     MetalAngleReference,
 )
 from .naca65 import generate_naca65, parse_naca65_designation
+from .normal_bspline import generate_normal_offset_profile
 from .sampling import generate_dataset
 from .storage_naca65 import NACA65BenchmarkStore
 from .storage_v2 import DatasetStoreV2
@@ -67,6 +70,9 @@ __all__ = [
     "NACA65BenchmarkManifest",
     "NACA65Family",
     "NACA65FitReport",
+    "NACA65FitGeometry",
+    "NACA65SplineSpec",
+    "generate_normal_offset_profile",
     "NACA65Geometry",
     "NACA65InputMode",
     "NACA65Spec",

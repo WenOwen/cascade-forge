@@ -8,10 +8,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .models import _round_floats
+from .models_v2 import BSplineCurveSpec
 
 NACA65_SCHEMA_VERSION = "1.0.0"
 NACA65_ALGORITHM_VERSION = "nasa-sixseries-1974-python-v1"
-NACA65_BENCHMARK_VERSION = "naca65-benchmark-1.0.0"
+NACA65_BENCHMARK_VERSION = "naca65-benchmark-2.0.0"
 
 
 class NACA65Family(StrEnum):
@@ -37,6 +38,7 @@ class NACA65Spec(BaseModel):
     input_mode: NACA65InputMode = NACA65InputMode.GENERAL
     preset_designation: str | None = None
     points_per_side: Literal[201] = 201
+    decomposition_version: Literal["sixseries-stations-v2"] = "sixseries-stations-v2"
 
     @model_validator(mode="after")
     def check_family_contract(self) -> NACA65Spec:
@@ -59,12 +61,8 @@ class NACA65Spec(BaseModel):
 
     @property
     def native_id(self) -> str:
-        payload = self.model_dump(
-            mode="json", exclude={"input_mode", "preset_designation"}
-        )
-        raw = json.dumps(
-            _round_floats(payload), sort_keys=True, separators=(",", ":")
-        ).encode()
+        payload = self.model_dump(mode="json", exclude={"input_mode", "preset_designation"})
+        raw = json.dumps(_round_floats(payload), sort_keys=True, separators=(",", ":")).encode()
         return "naca65_" + hashlib.sha256(raw).hexdigest()[:24]
 
 
@@ -80,6 +78,11 @@ class NACA65Geometry(BaseModel):
     normalized_pressure: list[list[float]]
     camber: list[list[float]]
     thickness: list[float]
+    construction_camber: list[list[float]]
+    construction_half_thickness: list[float]
+    construction_normals: list[list[float]]
+    construction_parameter: list[float]
+    parameter: list[float]
     source_provenance: dict[str, str]
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -105,12 +108,55 @@ class NACA65FitReport(BaseModel):
     elapsed_seconds: float
     explicit_spec: dict[str, Any] | None = None
     warnings: list[str] = Field(default_factory=list)
+    diagnostics: dict[str, float] = Field(default_factory=dict)
+    error_parameter: list[float] = Field(default_factory=list)
+    method_version: str = "naca65-normal-bspline-v2"
+
+
+class NACA65SplineSpec(BaseModel):
+    """Authoritative normal-offset model, not a v2.1 surface approximation."""
+
+    generator_version: Literal["naca65-normal-bspline-v2"] = "naca65-normal-bspline-v2"
+    camber_curve: BSplineCurveSpec
+    thickness_shape_curve: BSplineCurveSpec
+    linked_thickness: Literal[True] = True
+    thickness_law: Literal["sqrt(s)*(1-s)*B(s)"] = "sqrt(s)*(1-s)*B(s)"
+    parameter_convention: str = "normalized-source-mean-line-arclength"
+    trailing_edge: Literal["sharp"] = "sharp"
+
+    @property
+    def geometry_id(self) -> str:
+        raw = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        return "geo_naca_normal_" + hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+class NACA65FitGeometry(BaseModel):
+    geometry_id: str
+    source_id: str
+    spec: NACA65SplineSpec
+    suction: list[list[float]]
+    pressure: list[list[float]]
+    camber: list[list[float]]
+    thickness: list[float]
+    normals: list[list[float]]
+    parameter: list[float]
+    leading_osculating_circle: list[list[float]]
+    trailing_osculating_circle: list[list[float]] = Field(default_factory=list)
+    edge_metrics: dict[str, float]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    def arrays(self):
+        import numpy as np
+
+        return tuple(
+            np.asarray(x) for x in (self.suction, self.pressure, self.camber, self.thickness)
+        )
 
 
 class NACA65BenchmarkConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
-    benchmark_version: Literal["naca65-benchmark-1.0.0"] = NACA65_BENCHMARK_VERSION
+    benchmark_version: Literal["naca65-benchmark-2.0.0"] = NACA65_BENCHMARK_VERSION
     thickness_ratios: tuple[float, ...] = (0.06, 0.10, 0.15)
     design_lift_coefficients: tuple[float, ...] = (0.0, 0.8, 1.2)
     series_65_loading_parameters: tuple[float, ...] = (0.6, 0.8, 1.0)
@@ -129,7 +175,7 @@ class NACA65BenchmarkConfig(BaseModel):
 
 class NACA65BenchmarkManifest(BaseModel):
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
-    benchmark_version: Literal["naca65-benchmark-1.0.0"] = NACA65_BENCHMARK_VERSION
+    benchmark_version: Literal["naca65-benchmark-2.0.0"] = NACA65_BENCHMARK_VERSION
     run_id: str
     config: NACA65BenchmarkConfig
     total_cases: int
