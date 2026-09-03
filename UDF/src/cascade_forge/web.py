@@ -34,7 +34,7 @@ from .workspace import WorkspaceStore
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PACKAGE_ROOT / "configs" / "geometry-v1.0.0.yaml"
-DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.0.0.yaml"
+DEFAULT_CONFIG_V2 = PACKAGE_ROOT / "configs" / "geometry-v2.1.0.yaml"
 DEFAULT_ANCHORS = PACKAGE_ROOT / "data" / "raw" / "nasa120859"
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
@@ -82,7 +82,7 @@ def create_app(
 
         is_v2_root = (
             str(json.loads(manifest_path.read_text(encoding="utf-8")).get("schema_version"))
-            == "2.0.0"
+            == "2.1.0"
         )
     if is_v2_root:
         v1_root = dataset_root.parent / "geometry-v1.0.0"
@@ -92,7 +92,7 @@ def create_app(
         resolved_v2_root = (
             Path(v2_dataset_root).resolve()
             if v2_dataset_root
-            else dataset_root.parent / "geometry-v2.0.0"
+            else dataset_root.parent / "geometry-v2.1.0"
         )
     store = DatasetStore(v1_root)
     store_v2 = DatasetStoreV2(resolved_v2_root)
@@ -104,7 +104,7 @@ def create_app(
     jobs = JobManager(store)
     jobs_v2 = JobManager(store_v2)
     templates = Jinja2Templates(directory=str(TEMPLATE_ROOT))
-    application = FastAPI(title="Cascade Forge", version="2.0.0")
+    application = FastAPI(title="Cascade Forge", version="2.1.0")
     application.state.store = store
     application.state.jobs = jobs
     application.state.store_v2 = store_v2
@@ -633,7 +633,7 @@ def create_app(
         return JSONResponse(
             {
                 "status": "ok",
-                "schema_version": "2.0.0",
+                "schema_version": "2.1.0",
                 "v1": {"total": store.count()},
                 "v2": {"total": store_v2.count()},
             }
@@ -664,7 +664,7 @@ def _default_spec_v2() -> GeometrySpecV2:
     return GeometrySpecV2(
         intent=GeometryIntentV2(
             inlet_metal_angle_deg=55.0,
-            turning_angle_deg=25.0,
+            outlet_metal_angle_deg=30.0,
             stagger_deg=42.0,
             max_thickness_ratio=0.10,
             max_thickness_x_ratio=0.42,
@@ -688,14 +688,56 @@ def _page_context(page: str, store: DatasetStoreV2, workspace: WorkspaceStore) -
 
 def _geometry_payload(geometry) -> dict[str, Any]:
     suction, pressure, camber, thickness = geometry.arrays()
+    stagger = float(geometry.realized_stagger_deg)
+    placed_suction = _rotate_points(suction, stagger)
+    placed_pressure = _rotate_points(pressure, stagger)
+    placed_camber = _rotate_points(camber, stagger)
+    control_points = _rotate_points(
+        np.asarray(geometry.spec.camber_curve.control_points, dtype=float), stagger
+    )
+    leading_circle = _rotate_points(
+        np.asarray(geometry.leading_osculating_circle, dtype=float), stagger
+    )
+    trailing_circle = _rotate_points(
+        np.asarray(geometry.trailing_osculating_circle, dtype=float), stagger
+    )
     suction_curvature, suction_s = curve_curvature(suction)
     pressure_curvature, pressure_s = curve_curvature(pressure)
-    camber_delta = np.gradient(camber, axis=0, edge_order=2)
+    camber_delta = np.gradient(placed_camber, axis=0, edge_order=2)
     angle = np.degrees(np.arctan2(camber_delta[:, 1], camber_delta[:, 0]))
+    edge_display = {}
+    for edge in ("leading", "trailing"):
+        edge_display[edge] = {
+            "center": _rotate_points(
+                np.asarray([geometry.metadata[f"{edge}_edge_center"]]), stagger
+            )[0].tolist(),
+            "nose": _rotate_points(
+                np.asarray([geometry.metadata[f"{edge}_edge_nose"]]), stagger
+            )[0].tolist(),
+            "tangent": _rotate_vectors(
+                np.asarray([geometry.metadata[f"{edge}_edge_tangent"]]), stagger
+            )[0].tolist(),
+        }
+    arc_angles = np.radians(np.linspace(0.0, stagger, 48))
+    stagger_arc = np.column_stack([0.18 * np.cos(arc_angles), 0.18 * np.sin(arc_angles)])
     return {
         "geometry": geometry.model_dump(mode="json"),
         "features": extract_features(geometry).model_dump(mode="json"),
         "validation": validate_profile(geometry).model_dump(mode="json"),
+        "placement": {
+            "coordinate_frame": "x-axial,y-positive-tangential",
+            "stagger_deg": stagger,
+            "suction": placed_suction.tolist(),
+            "pressure": placed_pressure.tolist(),
+            "camber": placed_camber.tolist(),
+            "control_points": control_points.tolist(),
+            "leading_osculating_circle": leading_circle.tolist(),
+            "trailing_osculating_circle": trailing_circle.tolist(),
+            "chord": [[0.0, 0.0], _rotate_points(np.asarray([[1.0, 0.0]]), stagger)[0].tolist()],
+            "axial_reference": [[-0.12, 0.0], [1.12, 0.0]],
+            "stagger_arc": stagger_arc.tolist(),
+            "edges": edge_display,
+        },
         "analysis": {
             "camber_x": camber[:, 0].tolist(),
             "thickness": thickness.tolist(),
@@ -712,6 +754,18 @@ def _geometry_payload(geometry) -> dict[str, Any]:
             "angle_deg": angle.tolist(),
         },
     }
+
+
+def _rotate_points(points: np.ndarray, angle_deg: float) -> np.ndarray:
+    angle = np.radians(angle_deg)
+    rotation = np.asarray(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+    )
+    return np.asarray(points, dtype=float) @ rotation.T
+
+
+def _rotate_vectors(vectors: np.ndarray, angle_deg: float) -> np.ndarray:
+    return _rotate_points(vectors, angle_deg)
 
 
 def _profile_figure(geometry) -> go.Figure:
