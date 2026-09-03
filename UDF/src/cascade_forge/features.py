@@ -113,14 +113,15 @@ def _extract_features_v2(geometry: AirfoilGeometryV2) -> GeometryFeaturesV2:
     def interior_max(values: np.ndarray) -> float:
         return float(np.max(np.abs(values[margin:-margin])))
 
-    handedness_sign = 1.0 if geometry.spec.intent.handedness.value == "right" else -1.0
-    intent = geometry.spec.intent
-    inlet_axial = handedness_sign * intent.inlet_metal_angle_axial_deg
-    outlet_axial = handedness_sign * intent.outlet_metal_angle_axial_deg
+    from .curves import CurveEvaluator
+
+    tangent = CurveEvaluator(geometry.spec.camber_curve).evaluate([0.0, 1.0], 1)
+    local_angles = np.degrees(np.arctan2(tangent[:, 1], tangent[:, 0]))
+    inlet_local, outlet_local = (round(float(angle), 12) for angle in local_angles)
+    inlet_axial = inlet_local + geometry.realized_stagger_deg
+    outlet_axial = outlet_local + geometry.realized_stagger_deg
     inlet_tangential = 90.0 - inlet_axial
     outlet_tangential = 90.0 - outlet_axial
-    inlet_local = handedness_sign * intent.inlet_local_angle_deg
-    outlet_local = handedness_sign * intent.outlet_local_angle_deg
     outline = np.vstack([suction, pressure[-2:0:-1]])
     return GeometryFeaturesV2(
         geometry_id=geometry.geometry_id,

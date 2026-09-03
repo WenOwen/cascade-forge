@@ -100,9 +100,8 @@ def validate_profile_v2(
             add("error", "xt_mismatch", "最大厚度位置未达到工程意图", xt_error, 0.005)
 
     inlet_actual, outlet_actual = _actual_metal_angles(geometry)
-    sign = 1.0 if geometry.spec.intent.handedness.value == "right" else -1.0
-    inlet_target = sign * geometry.spec.intent.inlet_metal_angle_axial_deg
-    outlet_target = sign * geometry.spec.intent.outlet_metal_angle_axial_deg
+    inlet_target = geometry.spec.intent.inlet_metal_angle_axial_deg
+    outlet_target = geometry.spec.intent.outlet_metal_angle_axial_deg
     inlet_error = abs(inlet_actual - inlet_target)
     outlet_error = abs(outlet_actual - outlet_target)
     if inlet_error > 0.05:

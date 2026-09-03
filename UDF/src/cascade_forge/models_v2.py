@@ -111,11 +111,20 @@ class GeometryIntentV2(BaseModel):
 
     @property
     def inlet_local_angle_deg(self) -> float:
-        return self.inlet_metal_angle_axial_deg - self.stagger_deg
+        return round(self.inlet_metal_angle_axial_deg - self.stagger_deg, 12)
 
     @property
     def outlet_local_angle_deg(self) -> float:
-        return self.outlet_metal_angle_axial_deg - self.stagger_deg
+        return round(self.outlet_metal_angle_axial_deg - self.stagger_deg, 12)
+
+    def normalized_axial(self) -> GeometryIntentV2:
+        """Persist signed axial angles; the input reference is only a representation."""
+
+        return self.model_copy(update={
+            "inlet_metal_angle_deg": round(self.inlet_metal_angle_axial_deg, 12),
+            "outlet_metal_angle_deg": round(self.outlet_metal_angle_axial_deg, 12),
+            "metal_angle_reference": MetalAngleReference.AXIAL,
+        })
 
     @property
     def metal_angle_difference_deg(self) -> float:

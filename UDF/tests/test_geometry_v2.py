@@ -109,6 +109,8 @@ def test_axial_tangential_reference_round_trip_and_identity(intent: GeometryInte
         }
     )
     tangential = generate_profile(GeometrySpecV2(intent=tangential_intent))
+    assert tangential.spec.intent.metal_angle_reference == MetalAngleReference.AXIAL
+    assert tangential.spec.intent.inlet_metal_angle_deg == 55.0
     assert tangential.geometry_id == axial.geometry_id
     assert tangential.intent_id == axial.intent_id
     np.testing.assert_allclose(tangential.suction, axial.suction, atol=1e-13)

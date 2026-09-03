@@ -442,10 +442,9 @@ def _design_bounds(initial: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2, list[str]]:
     warnings = list(anchor.metadata.get("source_warnings", []))
-    sign = 1.0 if features.inlet_metal_angle_deg >= 0.0 else -1.0
-    inlet = float(np.clip(sign * features.inlet_metal_angle_deg, -84.0, 84.0))
-    outlet = float(np.clip(sign * features.outlet_metal_angle_deg, -84.0, 84.0))
-    stagger = float(np.clip(sign * features.stagger_deg, -84.0, 84.0))
+    inlet = float(np.clip(features.inlet_metal_angle_deg, -84.0, 84.0))
+    outlet = float(np.clip(features.outlet_metal_angle_deg, -84.0, 84.0))
+    stagger = float(features.stagger_deg)
     tmax = float(np.clip(features.max_thickness_ratio, 0.03, 0.18))
     xt = float(np.clip(features.max_thickness_x_ratio, 0.20, 0.65))
     source_le = float(anchor.metadata.get("leading_edge_radius_ratio", 0.005))
@@ -474,9 +473,8 @@ def _anchor_intent(anchor: AirfoilGeometry, features) -> tuple[GeometryIntentV2,
 
 
 def _intent_from_design(values: np.ndarray, base: GeometryIntentV2) -> GeometryIntentV2:
-    sign = 1.0 if base.handedness.value == "right" else -1.0
-    inlet = sign * math.degrees(values[0]) + base.stagger_deg
-    outlet = sign * math.degrees(values[1]) + base.stagger_deg
+    inlet = math.degrees(values[0]) + base.stagger_deg
+    outlet = math.degrees(values[1]) + base.stagger_deg
     inlet = float(np.clip(inlet, -84.0, 84.0))
     outlet = float(np.clip(outlet, -84.0, 84.0))
     return base.model_copy(

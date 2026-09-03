@@ -14,7 +14,6 @@ from .curves import (
     signed_curvature,
     unit_tangent_and_normal,
 )
-from .models import Handedness
 from .models_v2 import (
     AirfoilGeometryV2,
     BSplineCurveSpec,
@@ -34,14 +33,14 @@ class SurfaceFit:
 def resolve_geometry_spec(spec: GeometrySpecV2) -> GeometrySpecV2:
     """把基础工程意图确定性解析为统一 B-spline 显式合同。"""
 
+    spec = spec.model_copy(update={"intent": spec.intent.normalized_axial()})
     if spec.resolved:
         _check_camber_endpoints(spec.camber_curve)
         return spec
 
     intent = spec.intent
-    sign = 1.0 if intent.handedness == Handedness.RIGHT else -1.0
-    inlet_local = math.radians(sign * intent.inlet_local_angle_deg)
-    outlet_local = math.radians(sign * intent.outlet_local_angle_deg)
+    inlet_local = math.radians(intent.inlet_local_angle_deg)
+    outlet_local = math.radians(intent.outlet_local_angle_deg)
     camber = BSplineCurveSpec(
         control_points=[
             [0.0, 0.0],
@@ -165,11 +164,7 @@ def generate_profile_v2(spec: GeometrySpecV2) -> AirfoilGeometryV2:
         pressure_surface_curve=pressure_fit.curve,
         leading_osculating_circle=le_circle.tolist(),
         trailing_osculating_circle=te_circle.tolist(),
-        realized_stagger_deg=(
-            resolved.intent.stagger_deg
-            if resolved.intent.handedness == Handedness.RIGHT
-            else -resolved.intent.stagger_deg
-        ),
+        realized_stagger_deg=resolved.intent.stagger_deg,
         edge_metrics=edge_metrics,
         metadata={
             "mathematical_kernel": "unified-bspline-g2-constrained-normal-fit",
@@ -186,8 +181,7 @@ def generate_profile_v2(spec: GeometrySpecV2) -> AirfoilGeometryV2:
 
 
 def reference_stagger(spec: GeometrySpecV2) -> float:
-    sign = 1.0 if spec.intent.handedness == Handedness.RIGHT else -1.0
-    return sign * spec.intent.stagger_deg
+    return spec.intent.stagger_deg
 
 
 def _basic_thickness_curve(
