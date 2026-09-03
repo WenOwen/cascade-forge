@@ -1,5 +1,6 @@
 """Cascade Forge public API."""
 
+from .benchmark_naca65 import run_naca65_benchmark
 from .blade3d import build_blade
 from .features import extract_features
 from .fitting_naca65 import evaluate_reference_fit, fit_reference_geometry
@@ -32,12 +33,14 @@ from .models_v2 import (
 )
 from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
+from .storage_naca65 import NACA65BenchmarkStore
 from .storage_v2 import DatasetStoreV2
 from .validation import validate_profile
 from .workspace import WorkspaceStore
 
 __all__ = [
     "build_blade",
+    "run_naca65_benchmark",
     "export_geomturbo",
     "extract_features",
     "fit_anchor_geometry",
@@ -50,6 +53,7 @@ __all__ = [
     "ingest_legacy_anchors",
     "validate_profile",
     "DatasetStoreV2",
+    "NACA65BenchmarkStore",
     "WorkspaceStore",
     "AirfoilGeometryV2",
     "AnchorFitRecord",

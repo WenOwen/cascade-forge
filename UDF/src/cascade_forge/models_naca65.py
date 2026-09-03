@@ -90,14 +90,14 @@ class NACA65FitReport(BaseModel):
     native_id: str
     geometry_id: str | None = None
     fit_status: Literal["valid", "warning", "rejected", "failed"]
-    rms_distance_ratio: float
-    max_distance_ratio: float
-    hausdorff_approx_ratio: float
-    core_rms_distance_ratio: float
-    core_max_distance_ratio: float
+    rms_distance_ratio: float | None
+    max_distance_ratio: float | None
+    hausdorff_approx_ratio: float | None
+    core_rms_distance_ratio: float | None
+    core_max_distance_ratio: float | None
     suction_signed_normal_error: list[float]
     pressure_signed_normal_error: list[float]
-    area_difference_ratio: float
+    area_difference_ratio: float | None
     feature_deltas: dict[str, float]
     iterations: int
     converged: bool
