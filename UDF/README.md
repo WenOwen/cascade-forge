@@ -178,7 +178,7 @@ NASA 原始文件、源码、配置和已有导出制品未删除。被清理的
 在项目根目录执行：
 
 ```powershell
-.\UDF\start.ps1
+.\start.cmd
 ```
 
 或：
@@ -188,7 +188,7 @@ cd UDF
 .\.venv\Scripts\python.exe -m cascade_forge.cli serve --dataset datasets/geometry-v1.0.0 --v2-dataset datasets/geometry-v2.1.0 --workspace datasets/workspace-v2
 ```
 
-浏览器打开 `http://127.0.0.1:8000/`。可通过 `.\UDF\start.ps1 -Port 8010` 改端口。
+也可以直接双击项目根目录的 `start.cmd`。浏览器打开 `http://127.0.0.1:8000/`；在命令提示符中执行 `start.cmd 8010` 可改用 8010 端口。启动器会从自身位置解析项目路径，因此不要求预先切换目录。
 
 ### 本轮验证
 
@@ -284,7 +284,7 @@ Web 新增可开关的法向厚度连线、共享半厚度对比图和“法向�
 
 CLI 单型拟合与新版基准恢复通过；恢复后仍为 36 条，无重复分区。视觉证据：`output/playwright/naca65-corrected-1440.png`。测试有一条既存 Starlette/httpx 弃用提示，不影响通过。
 
-启动仍用项目根目录 `./UDF/start.ps1`；单型命令不变。新基准命令：
+Windows 启动使用项目根目录 `./start.cmd`；单型命令不变。新基准命令：
 
 ```powershell
 cd UDF
