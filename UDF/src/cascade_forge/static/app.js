@@ -326,8 +326,67 @@
   }
 
   function initCompare() {
-    const root = $("[data-compare-root]"); if (!root) return; const form = $("[data-compare-form]"); const saved = sessionStorage.getItem("cf-compare"); if (saved) form.elements.ids.value = saved;
-    form.addEventListener("submit", async event => { event.preventDefault(); const ids = form.elements.ids.value.split(/\s+/).filter(Boolean); try { const data = await fetchJSON("/api/v2/compare", { method: "POST", body: JSON.stringify({ geometry_ids: ids }) }); const traces = []; data.items.forEach((g, index) => { const palette = [colors.blue, colors.orange, colors.green, "#af52de", colors.red]; traces.push({ ...xy(g.suction), name: `${g.geometry_id} SS`, line: { color: palette[index % palette.length] } }, { ...xy(g.pressure), name: `${g.geometry_id} PS`, line: { color: palette[index % palette.length], dash: "dash" } }); }); Charts.render("compare-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "y/c" }, xaxis: { title: "x/c" } }); $("[data-compare-body]").innerHTML = data.features.map(f => `<tr><td><code>${escapeHTML(f.geometry_id)}</code></td><td>${escapeHTML(f.kernel)}</td><td>${f.max_thickness_ratio.toFixed(5)}</td><td>${f.max_thickness_x_ratio.toFixed(5)}</td><td>${f.max_camber_ratio.toFixed(5)}</td><td>${f.leading_edge_radius_ratio.toExponential(3)}</td><td>${f.trailing_edge_radius_ratio.toExponential(3)}</td></tr>`).join(""); } catch (error) { notice(error.message, true); } }); if (saved) form.requestSubmit();
+    const root = $("[data-compare-root]"); if (!root) return;
+    const form = $("[data-compare-form]", root), input = form.elements.ids;
+    const button = $("button[type='submit']", form), exportButton = $("[data-export-comparison]", root);
+    const errorNode = $("[data-compare-error]", root), summary = $("[data-compare-summary]", root);
+    const body = $("[data-compare-body]", root);
+    let resultRows = [], sequence = 0;
+    const saved = sessionStorage.getItem("cf-compare"); if (saved) input.value = saved;
+    function clearResult() {
+      resultRows = []; exportButton.disabled = true; body.replaceChildren();
+      const chart = $("#compare-chart");
+      window.Plotly?.purge(chart); chart.replaceChildren(); chart.classList.add("empty-chart");
+    }
+    input.addEventListener("input", () => {
+      sequence++; button.disabled = false; button.textContent = "叠加比较";
+      root.setAttribute("aria-busy", "false"); clearResult();
+      errorNode.hidden = true; summary.textContent = "输入已修改，请重新比较";
+    });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const current = ++sequence;
+      const ids = [...new Set(input.value.split(/[\s,，;；]+/).filter(Boolean))];
+      clearResult(); errorNode.hidden = true;
+      if (ids.length < 2 || ids.length > 12) {
+        errorNode.textContent = `请输入 2–12 个不同 Geometry ID，当前为 ${ids.length} 个。`;
+        errorNode.hidden = false; summary.textContent = "输入需要调整"; input.focus(); return;
+      }
+      input.value = ids.join("\n"); button.disabled = true; button.textContent = "正在比较…";
+      root.setAttribute("aria-busy", "true"); summary.textContent = `正在比较 ${ids.length} 个叶型…`;
+      try {
+        const data = await fetchJSON("/api/v2/compare", { method: "POST", body: JSON.stringify({ geometry_ids: ids }) });
+        if (current !== sequence) return;
+        const traces = [], palette = [colors.blue, colors.orange, colors.green, "#af52de", colors.red, "#008b8b", "#8b4513", "#5865b0", "#b03060", "#657800", "#007c91", "#7d5a50"];
+        data.items.forEach((g, index) => {
+          const color = palette[index];
+          traces.push({ ...xy(g.suction), name: `${index + 1} ${g.geometry_id} SS`, line: { color } }, { ...xy(g.pressure), name: `${index + 1} ${g.geometry_id} PS`, line: { color, dash: "dash" } });
+        });
+        await Charts.render("compare-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "y/c" }, xaxis: { title: "x/c" } });
+        if (current !== sequence) return;
+        const baseline = data.features[0];
+        resultRows = data.features.map((f, index) => ({ ...f, baseline: index === 0, delta_thickness: f.max_thickness_ratio - baseline.max_thickness_ratio, delta_position: f.max_thickness_x_ratio - baseline.max_thickness_x_ratio, delta_camber: f.max_camber_ratio - baseline.max_camber_ratio }));
+        const signed = value => `${value > 0 ? "+" : ""}${value.toFixed(6)}`;
+        body.innerHTML = resultRows.map(f => `<tr><td><code>${escapeHTML(f.geometry_id)}</code>${f.baseline ? "（基准）" : ""}</td><td>${escapeHTML(f.kernel)}</td><td>${f.max_thickness_ratio.toFixed(5)}</td><td>${f.max_thickness_x_ratio.toFixed(5)}</td><td>${f.max_camber_ratio.toFixed(5)}</td><td>${f.leading_edge_radius_ratio.toExponential(3)}</td><td>${f.trailing_edge_radius_ratio.toExponential(3)}</td><td>${signed(f.delta_thickness)}</td><td>${signed(f.delta_position)}</td><td>${signed(f.delta_camber)}</td></tr>`).join("");
+        summary.textContent = `已比较 ${ids.length} 个叶型 · 基准：${ids[0]}`;
+        sessionStorage.setItem("cf-compare", ids.join("\n")); exportButton.disabled = false;
+      } catch (error) {
+        if (current !== sequence) return;
+        clearResult(); errorNode.textContent = `比较失败：${error.message}`;
+        errorNode.hidden = false; summary.textContent = "请检查 ID 或网络后重新提交";
+      } finally {
+        if (current === sequence) { button.disabled = false; button.textContent = "叠加比较"; root.setAttribute("aria-busy", "false"); }
+      }
+    });
+    exportButton.addEventListener("click", () => {
+      const columns = ["geometry_id", "baseline", "kernel", "max_thickness_ratio", "max_thickness_x_ratio", "max_camber_ratio", "leading_edge_radius_ratio", "trailing_edge_radius_ratio", "delta_thickness", "delta_position", "delta_camber"];
+      const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
+      const csv = [columns.join(","), ...resultRows.map(row => columns.map(key => quote(row[key])).join(","))].join("\r\n");
+      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a"); link.href = url; link.download = "geometry-comparison.csv";
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    if (saved) form.requestSubmit();
   }
 
   function initCascade() {
