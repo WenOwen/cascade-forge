@@ -274,14 +274,26 @@ class DatasetStoreV2:
             self.refresh_views()
         return path
 
-    def count(self, origin: str | None = None) -> int:
+    @staticmethod
+    def _search_filters(origin=None, status=None, search=None):
+        where, parameters = [], []
+        for column, value in (("origin", origin), ("validation_status", status)):
+            if value:
+                where.append(f"{column} = ?")
+                parameters.append(value)
+        if search and search.strip():
+            where.append("contains(lower(geometry_id), lower(?))")
+            parameters.append(search.strip())
+        return (" WHERE " + " AND ".join(where) if where else ""), parameters
+
+    def count(
+        self, origin: str | None = None, *, status: str | None = None,
+        search: str | None = None,
+    ) -> int:
         if not any(self.geometry_dir.glob("*.parquet")):
             return 0
-        query = "SELECT count(*) FROM geometries_v2"
-        parameters: list[Any] = []
-        if origin is not None:
-            query += " WHERE origin = ?"
-            parameters.append(origin)
+        clause, parameters = self._search_filters(origin, status, search)
+        query = "SELECT count(*) FROM geometries_v2" + clause
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:
             return int(connection.execute(query, parameters).fetchone()[0])
 
@@ -399,9 +411,8 @@ class DatasetStoreV2:
         origin: str | None = None,
         sort: str = "geometry_id",
         descending: bool = False,
+        search: str | None = None,
     ) -> list[dict[str, Any]]:
-        if not any(self.geometry_dir.glob("*.parquet")):
-            return []
         allowed_sort = {
             "geometry_id",
             "max_thickness_ratio",
@@ -411,16 +422,13 @@ class DatasetStoreV2:
         }
         if sort not in allowed_sort:
             raise ValueError(f"不支持的排序字段: {sort}")
-        where: list[str] = []
-        parameters: list[Any] = []
-        for column, value in (("validation_status", status), ("origin", origin)):
-            if value:
-                where.append(f"{column} = ?")
-                parameters.append(value)
-        clause = " WHERE " + " AND ".join(where) if where else ""
+        if not any(self.geometry_dir.glob("*.parquet")):
+            return []
+        clause, parameters = self._search_filters(origin, status, search)
         direction = "DESC" if descending else "ASC"
         query = (
-            f"SELECT * FROM geometry_search_v2{clause} ORDER BY {sort} {direction} LIMIT ? OFFSET ?"
+            f"SELECT * FROM geometry_search_v2{clause} ORDER BY {sort} {direction}, "
+            "geometry_id ASC LIMIT ? OFFSET ?"
         )
         parameters.extend([max(1, min(limit, 1000)), max(0, offset)])
         with self._lock, duckdb.connect(str(self.catalog_path)) as connection:

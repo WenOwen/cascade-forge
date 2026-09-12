@@ -426,6 +426,7 @@ def create_app(
         origin: str | None = None,
         sort: str = "geometry_id",
         descending: bool = False,
+        search: str | None = Query(None, max_length=120),
     ) -> dict[str, Any]:
         try:
             items = store_v2.list_geometries(
@@ -435,6 +436,7 @@ def create_app(
                 origin=origin,
                 sort=sort,
                 descending=descending,
+                search=search,
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -442,7 +444,7 @@ def create_app(
             "items": items,
             "limit": limit,
             "offset": offset,
-            "total": store_v2.count(),
+            "total": store_v2.count(origin=origin, status=status, search=search),
         }
 
     @application.get("/api/v2/geometries/{geometry_id}")
