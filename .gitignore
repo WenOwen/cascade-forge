@@ -11,4 +11,6 @@ UDF/datasets/
 UDF/logs/
 UDF/output/
 UDF/.playwright-cli/
+/.playwright-cli/
+/output/playwright/
 *.duckdb.wal
