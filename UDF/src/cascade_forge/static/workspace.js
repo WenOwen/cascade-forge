@@ -6,7 +6,7 @@
   const find = name => dialog.querySelector(`[data-workspace-browser-${name}]`);
   const list = find("list"), status = find("status"), errorBox = find("error");
   const pageSize = 12;
-  let offset = 0, hasNext = false, loading = false, acting = false;
+  let offset = 0, hasNext = false, loading = false, acting = false, applyingDesign = false;
   let listRequest = null, actionRequest = null, generation = 0, retryAction = null;
   let returnFocus = null;
 
@@ -28,6 +28,7 @@
     find("prev").disabled = busy || offset === 0;
     find("next").disabled = busy || !hasNext;
     list.querySelectorAll("button").forEach(button => { button.disabled = busy; });
+    dialog.querySelectorAll("[data-workspace-browser-close]").forEach(button => { button.disabled = applyingDesign; });
     list.setAttribute("aria-busy", String(busy));
   }
 
@@ -47,9 +48,8 @@
   }
 
   function savedDate(value) {
-    // Workspace timestamps are stored in UTC without a timezone suffix.
-    let iso = String(value || "").replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1");
-    if (iso && !/(Z|[+-]\d{2}:?\d{2})$/i.test(iso)) iso += "Z";
+    // DuckDB TIMESTAMP returns server-local wall time; retain explicit offsets when present.
+    const iso = String(value || "").replace(" ", "T").replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}|$)/i, "$1");
     const date = new Date(iso);
     return Number.isNaN(date.getTime()) ? String(value || "时间未知") : date.toLocaleString("zh-CN", { hour12: false });
   }
@@ -146,7 +146,15 @@
       const design = await readJSON(`/api/v2/workspace/designs/${encodeURIComponent(record.design_id)}`, signal);
       if (signal.aborted || token !== generation || !dialog.open) return;
       if (!window.CFStudio?.loadDesign) throw new Error("工作室尚未准备好，请稍后重试。");
-      const loaded = await window.CFStudio.loadDesign(design);
+      let loaded;
+      applyingDesign = true;
+      updateButtons();
+      try {
+        loaded = await window.CFStudio.loadDesign(design);
+      } finally {
+        applyingDesign = false;
+        updateButtons();
+      }
       if (signal.aborted || token !== generation || !dialog.open) return;
       if (loaded) dialog.close();
       else status.textContent = "尚未打开设计，可重新选择。";
@@ -180,7 +188,8 @@
   document.querySelectorAll("[data-open-workspace]").forEach(button => {
     button.addEventListener("click", () => openBrowser(button));
   });
-  dialog.querySelectorAll("[data-workspace-browser-close]").forEach(button => button.addEventListener("click", () => dialog.close()));
+  dialog.querySelectorAll("[data-workspace-browser-close]").forEach(button => button.addEventListener("click", () => { if (!applyingDesign) dialog.close(); }));
+  dialog.addEventListener("cancel", event => { if (applyingDesign) event.preventDefault(); });
   find("refresh").addEventListener("click", () => loadList(0));
   find("retry").addEventListener("click", () => retryAction?.());
   find("prev").addEventListener("click", () => loadList(Math.max(0, offset - pageSize)));
