@@ -1,0 +1,30 @@
+<dialog id="workspace-browser" class="workspace-browser" aria-labelledby="workspace-browser-title" aria-describedby="workspace-browser-help">
+  <div class="workspace-browser-shell">
+    <header class="workspace-browser-header">
+      <div>
+        <h2 id="workspace-browser-title">我的设计</h2>
+        <p id="workspace-browser-help" class="muted">打开已保存的叶型继续编辑，或下载备份。同名设计的每次保存都会保留一个修订。</p>
+      </div>
+      <button class="icon-button" type="button" data-workspace-browser-close aria-label="关闭我的设计" autofocus>×</button>
+    </header>
+    <div class="workspace-browser-toolbar">
+      <p class="muted" data-workspace-browser-status role="status" aria-live="polite">正在读取设计…</p>
+      <button class="button" type="button" data-workspace-browser-refresh>刷新列表</button>
+    </div>
+    <div class="workspace-browser-error" data-workspace-browser-error hidden>
+      <p data-workspace-browser-error-message role="alert"></p>
+      <button class="button" type="button" data-workspace-browser-retry>重试</button>
+    </div>
+    <div class="workspace-browser-empty" data-workspace-browser-empty hidden>
+      <h3>还没有保存的设计</h3>
+      <p class="muted">在工作室调整叶型后，点击“保存设计”。以后就能从这里重新打开。</p>
+      <button class="button primary" type="button" data-workspace-browser-close>继续设计</button>
+    </div>
+    <ul class="workspace-design-list" data-workspace-browser-list aria-label="已保存的叶型设计" aria-busy="false"></ul>
+    <nav class="workspace-browser-pagination" aria-label="设计列表分页" data-workspace-browser-pagination hidden>
+      <button class="button" type="button" data-workspace-browser-prev disabled>上一页</button>
+      <span data-workspace-browser-page>第 1 页</span>
+      <button class="button" type="button" data-workspace-browser-next disabled>下一页</button>
+    </nav>
+  </div>
+</dialog>
