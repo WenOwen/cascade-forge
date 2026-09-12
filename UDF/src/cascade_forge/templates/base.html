@@ -7,31 +7,113 @@
   <title>{% block title %}Cascade Forge{% endblock %}</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/app.css?v=2.1-naca-normal">
+  <link rel="stylesheet" href="/static/guidance.css?v=2.2-simple-workflow">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
-  <script src="/static/app.js?v=2.1-angles" defer></script>
+  <script src="/static/app.js?v=2.2-simple-workflow" defer></script>
   {% block extra_scripts %}{% endblock %}
 </head>
 <body data-page="{{ page|default('overview') }}">
+  <a class="skip-to-content" href="#main-content">跳转到主内容</a>
   <button class="sidebar-toggle" type="button" aria-label="打开导航" data-sidebar-toggle>☰</button>
   <div class="sidebar-scrim" data-sidebar-scrim></div>
   <aside class="sidebar" aria-label="主导航">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">CF</span><span><strong>Cascade Forge</strong><small>Geometry Workbench</small></span></a>
-    {% set navigation = [
+    {% set daily_navigation = [
       ('overview','/','总览','⌂'), ('studio','/studio','叶型工作室','◇'),
-      ('database','/database','数据库','▦'), ('compare','/compare','叶型比较','⇄'),
-      ('cascade','/cascade','叶栅检查','≋'), ('anchors','/anchors','NASA 锚点','◎'),
+      ('database','/database','数据库','▦'),
       ('naca65','/naca65','NACA 65 实验室','◉'),
-      ('blade','/blade','三维叶片','△'), ('datasets','/datasets','数据集与批次','▤'),
+      ('compare','/compare','叶型比较','⇄'), ('cascade','/cascade','叶栅检查','≋'),
+      ('blade','/blade','三维叶片','△')
+    ] %}
+    {% set maintenance_navigation = [
+      ('anchors','/anchors','NASA 锚点','◎'), ('datasets','/datasets','数据集与批次','▤'),
       ('audit','/audit','审计','✓'), ('jobs','/jobs','Jobs 与制品','◷')
     ] %}
-    <nav>{% for key, href, label, icon in navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}</nav>
+    <nav aria-label="日常设计">
+      <p class="nav-group-label">日常设计</p>
+      {% for key, href, label, icon in daily_navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"{% if page == key %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}
+    </nav>
+    <details class="maintenance-nav"{% if page in ['anchors', 'datasets', 'audit', 'jobs'] %} open{% endif %}>
+      <summary>数据库维护</summary>
+      <p class="nav-group-help">批量建库、校验与后台任务</p>
+      <nav aria-label="数据库维护">{% for key, href, label, icon in maintenance_navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"{% if page == key %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}</nav>
+    </details>
     <div class="sidebar-footer"><span class="status-dot"></span><span>本地离线</span><small>schema 2.1.0</small></div>
   </aside>
   <main class="workspace-shell">
     <header class="toolbar"><div><p class="toolbar-kicker">CASCADE FORGE</p><h1>{% block page_title %}总览{% endblock %}</h1></div><div class="toolbar-actions">{% block toolbar_actions %}{% endblock %}</div></header>
     <div id="global-notice" class="global-notice" role="status" aria-live="polite"></div>
-    <div class="page-content">{% block content %}{% endblock %}</div>
+    {% set page_guides = {
+      'studio': {
+        'purpose': '调整参数设计二维叶型，保存后可以继续编辑。',
+        'steps': ['先调进出口角、安装角与厚度，观察右侧轮廓变化。', '需要精修时展开高级参数；检查图表后保存设计。', '下载参数文件可以备份，也可以从已保存设计继续编辑。'],
+        'links': [('/naca65', '用标准 NACA 65 叶型起步')]
+      },
+      'database': {
+        'purpose': '查找已入库的叶型，查看轮廓、比较候选或导出坐标。',
+        'steps': ['通过 ID、来源或状态筛选叶型；重置可恢复全部结果。', '点击详情查看轮廓，勾选 2–12 个叶型后比较所选。', '选择导出格式并下载；手工保存的设计在叶型工作室中打开。'],
+        'links': [('/studio?open=workspace', '查看手工保存的设计'), ('/datasets', '数据库为空时：初始化数据集')]
+      },
+      'naca65': {
+        'purpose': '生成标准 NACA 65 叶型，并下载可导入 IGG 的二维曲线。',
+        'steps': ['保留默认编号或填写需要的编号，点击仅生成查看轮廓。', '需要验证参数化精度时，再使用生成并拟合。', '导出 IGG DAT 时选择原生或拟合轮廓；拆分 ZIP 包含吸力面和压力面。'],
+        'note': '导出的二维坐标以弦长 1 归一化，建模时按目标弦长缩放。',
+        'links': [('/studio', '改用自由参数设计')]
+      },
+      'compare': {
+        'purpose': '叠加候选叶型，查看形状和几何参数的差别。',
+        'steps': ['从数据库勾选 2–12 个叶型进入比较，也可以直接填写 ID。', '执行比较；列表中第一个叶型作为参数差值的基准。', '查看叠加轮廓与差值表，需要记录时导出比较 CSV。'],
+        'links': [('/database', '去数据库选择叶型')]
+      },
+      'cascade': {
+        'purpose': '检查叶型按节距排列后的几何关系。',
+        'steps': ['从数据库详情进入检查叶栅，或填写已入库的叶型 ID。', '调整稠度（弦长 / 节距）；数值越大，叶型排列越密。', '执行叶栅检查，查看相邻叶型轮廓和检查结果。'],
+        'note': '这里是几何检查，效率、损失等气动性能需要另外计算。',
+        'links': [('/database', '去数据库选择叶型')]
+      },
+      'blade': {
+        'purpose': '把叶根到叶尖的二维截面组合成三维叶片并导出。',
+        'steps': ['至少填写叶根、叶尖两行，每行使用一个已入库的叶型 ID。', 'Span 从 0 到 1 递增，半径从叶根到叶尖递增；半径和弦长单位为米。', '设置各截面的安装角，初次使用将 Lean / Sweep 保留为 0，再构造并下载 GeomTurbo。'],
+        'note': '输出截面数控制展向插值密度；叶片数控制周向排列数量。',
+        'links': [('/database', '先选择二维截面')]
+      },
+      'anchors': {
+        'purpose': '拟合 48 个 NASA 参考截面，为正式批量建库做准备。',
+        'steps': ['点击生成 / 恢复 48 个拟合，等待后台任务完成。', '查看拟合误差和状态；生成门禁通过后才能批量生成正式叶型。', '完成后进入数据集与批次，继续初始化。'],
+        'links': [('/datasets', '继续批量建库'), ('/jobs', '查看后台任务')]
+      },
+      'datasets': {
+        'purpose': '按步骤初始化数据库，批量生成可检索的正式叶型。',
+        'steps': ['先完成 NASA 锚点拟合，让生成门禁通过。', '设置目标有效叶型数量和并行进程，创建或恢复批次。', '批次完成后运行审计，再到数据库筛选叶型。'],
+        'links': [('/database', '浏览已有叶型'), ('/jobs', '查看后台任务')]
+      },
+      'audit': {
+        'purpose': '检查数据库记录和几何文件是否完整、可重复生成。',
+        'steps': ['完成批量生成后，点击运行完整审计。', '查看各项检查结果；需要排查时展开原始审计 JSON。'],
+        'note': '审计通过表示数据与几何检查通过，不代表气动性能优良。',
+        'links': [('/datasets', '查看数据集状态'), ('/database', '浏览叶型')]
+      },
+      'jobs': {
+        'purpose': '查看后台任务进度、失败原因，以及任务生成的文件。',
+        'steps': ['点击刷新查看最新状态，找到对应的任务类型。', '完成后从结果 / 制品列打开输出；制品就是任务生成的文件。'],
+        'links': [('/datasets', '返回批量建库')]
+      }
+    } %}
+    <div class="page-content" id="main-content" tabindex="-1">
+      {% set guide = page_guides.get(page|default('overview')) %}
+      {% if guide %}
+      <details class="page-guide">
+        <summary><span class="page-guide-purpose">{{ guide.purpose }}</span><span class="page-guide-toggle">怎么用<span aria-hidden="true">⌄</span></span></summary>
+        <div class="page-guide-body">
+          <ol>{% for step in guide.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+          {% if guide.note %}<p class="page-guide-note">{{ guide.note }}</p>{% endif %}
+          <div class="page-guide-links">{% for href, label in guide.links %}<a href="{{ href }}">{{ label }}<span aria-hidden="true"> →</span></a>{% endfor %}</div>
+        </div>
+      </details>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
   </main>
 </body>
 </html>

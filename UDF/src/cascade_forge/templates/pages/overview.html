@@ -1,15 +1,29 @@
 {% extends "base.html" %}
 {% block page_title %}总览{% endblock %}
 {% block content %}
-<section class="metric-grid">
-  <article class="metric-card"><span>v2 生成叶型</span><strong>{{ v2_generated }}</strong><small>geometry-v2.1.0</small></article>
-  <article class="metric-card"><span>NASA 锚点</span><strong>{{ v2_anchors }}</strong><small>只读来源快照</small></article>
-  <article class="metric-card"><span>派生拟合</span><strong>{{ v2_fits }}</strong><small>统一内核 48 目标</small></article>
-  <article class="metric-card"><span>Workspace</span><strong>{{ workspace_count }}</strong><small>可编辑修订</small></article>
+<section class="overview-start" aria-labelledby="overview-start-title">
+  <div><h2 id="overview-start-title">从二维叶型开始</h2><p>设计或选择一个叶型，检查形状，再导出二维坐标或组合成三维叶片。</p></div>
+  <a class="button" href="/studio?open=workspace">继续已保存设计{% if workspace_count %} · {{ workspace_count }}{% endif %}</a>
 </section>
-<section class="overview-grid">
-  <article class="surface-card welcome-card"><p class="eyebrow">GEOMETRY WORKBENCH</p><h2>从工程意图到可追溯叶片曲面</h2><p>统一 B-spline 内核使用中弧线法向加厚、约束最小二乘叶面拟合和端点 G2 密切圆合同。正式数据不可变，手工编辑进入独立 workspace。</p><div class="button-row"><a class="button primary" href="/studio">新建叶型</a><a class="button" href="/database">浏览数据库</a></div></article>
-  <article class="surface-card"><div class="card-heading"><div><p class="eyebrow">SYSTEM</p><h2>能力状态</h2></div><span class="pill success">离线可用</span></div><ul class="status-list"><li><span>二维统一内核</span><strong>B-spline G2</strong></li><li><span>LE / TE 半径</span><strong>密切圆</strong></li><li><span>数据接口</span><strong>/api/v2</strong></li><li><span>三维输出</span><strong>GeomTurbo 3.7</strong></li></ul></article>
+<section class="overview-task-grid" aria-label="选择要做的事">
+  <a class="overview-task" href="/studio"><span class="overview-task-icon" aria-hidden="true">◇</span><h3>自己设计叶型</h3><p>调整角度和厚度，实时查看轮廓，保存后继续修改。</p><span class="overview-task-link">打开叶型工作室 <span aria-hidden="true">→</span></span></a>
+  <a class="overview-task" href="/naca65"><span class="overview-task-icon" aria-hidden="true">◉</span><h3>生成标准叶型</h3><p>输入 NACA 65 编号，生成轮廓并下载 IGG 曲线文件。</p><span class="overview-task-link">打开 NACA 65 实验室 <span aria-hidden="true">→</span></span></a>
+  <a class="overview-task" href="/database"><span class="overview-task-icon" aria-hidden="true">▦</span><h3>筛选和比较叶型</h3><p>在数据库中查找候选，勾选后比较形状或导出坐标。</p><span class="overview-task-link">浏览数据库 <span aria-hidden="true">→</span></span></a>
+  <a class="overview-task" href="/blade"><span class="overview-task-icon" aria-hidden="true">△</span><h3>组合三维叶片</h3><p>使用已入库的截面，设置叶根到叶尖的尺寸与安装角。</p><span class="overview-task-link">打开三维叶片 <span aria-hidden="true">→</span></span></a>
 </section>
-<section class="surface-card"><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>常用工作流</h2></div></div><div class="action-grid"><a href="/studio"><strong>叶型工作室</strong><span>工程参数、后台 Spec JSON、密切圆放大</span></a><a href="/anchors"><strong>NASA 锚点</strong><span>只读审计与 48 个约束拟合</span></a><a href="/blade"><strong>三维叶片</strong><span>表单化 Section Schedule 与 GeomTurbo</span></a><a href="/audit"><strong>完整审计</strong><span>门禁、哈希、几何不变量与重建</span></a></div></section>
+<section class="overview-data" aria-labelledby="overview-data-title">
+  <div class="card-heading"><h2 id="overview-data-title">当前数据</h2><span class="pill success">本地离线可用</span></div>
+  <div class="metric-grid compact">
+    <article class="metric-card"><span>正式生成叶型</span><strong>{{ v2_generated }}</strong><small>可在数据库中筛选</small></article>
+    <article class="metric-card"><span>NASA 参考截面</span><strong>{{ v2_anchors }}</strong><small>保留来源的原始轮廓</small></article>
+    <article class="metric-card"><span>参考截面拟合</span><strong>{{ v2_fits }}</strong><small>由参考轮廓生成，目标 48 个</small></article>
+    <article class="metric-card"><span>手工保存设计</span><strong>{{ workspace_count }}</strong><small>在叶型工作室继续编辑</small></article>
+  </div>
+  {% if not v2_generated %}<p class="overview-data-note">还没有批量生成的正式叶型。你可以直接设计叶型或生成 NACA 65；需要批量建库时，展开左侧“数据库维护”。</p>{% endif %}
+</section>
+<details class="overview-maintenance">
+  <summary>需要批量建库时</summary>
+  <p>按顺序拟合参考截面、批量生成叶型、检查数据完整性。耗时任务的进度和输出文件可以在 Jobs 与制品中查看。</p>
+  <div class="overview-maintenance-links"><a href="/anchors">1. 拟合 NASA 参考截面</a><a href="/datasets">2. 生成正式叶型</a><a href="/audit">3. 检查数据库</a><a href="/jobs">查看后台任务与文件</a></div>
+</details>
 {% endblock %}
