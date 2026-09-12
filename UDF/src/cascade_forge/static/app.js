@@ -10,7 +10,7 @@
   const Charts = (() => {
     const observed = new WeakSet();
     const observer = new ResizeObserver(entries => entries.forEach(entry => {
-      if (entry.target && entry.target._fullLayout) window.Plotly?.Plots.resize(entry.target);
+      if (entry.target?._fullLayout && entry.target.getClientRects().length) window.Plotly?.Plots.resize(entry.target)?.catch(() => {});
     }));
     function render(target, data, layout = {}, config = {}) {
       const node = typeof target === "string" ? document.getElementById(target) : target;
@@ -18,9 +18,9 @@
       node.classList.remove("empty-chart");
       const merged = { ...baseLayout, ...layout, margin: { ...baseLayout.margin, ...(layout.margin || {}) } };
       if (!observed.has(node)) { observer.observe(node); observed.add(node); }
-      return Plotly.react(node, data, merged, { ...plotConfig, ...config }).then(() => Plotly.Plots.resize(node));
+      return Plotly.react(node, data, merged, { ...plotConfig, ...config }).then(() => { if (node.getClientRects().length) return Plotly.Plots.resize(node); });
     }
-    function resizeAll() { $$(".plotly-chart").forEach(node => node._fullLayout && Plotly.Plots.resize(node)); }
+    function resizeAll() { $$(".plotly-chart").forEach(node => { if (node._fullLayout && node.getClientRects().length) Plotly.Plots.resize(node)?.catch(() => {}); }); }
     window.addEventListener("resize", resizeAll, { passive: true });
     document.addEventListener("htmx:afterSettle", resizeAll);
     return { render, resizeAll };
@@ -87,7 +87,19 @@
     let currentPayload = null; let currentSpec = structuredClone(defaults); let lastValidJSON = "";
     let analysisTab = "thickness"; let requestToken = 0; let activeReference = defaults.intent.metal_angle_reference || "axial";
     let lastStagger = Number(defaults.intent.stagger_deg); let jsonDirty = false;
-    jsonEditor.addEventListener("input", () => { jsonDirty = true; });
+    let previewTimer, ready = false, unsaved = false, lastPreviewUnsaved = false, designName = "未命名叶型", designTags = [];
+    const feedback = $("[data-studio-feedback]", root), feedbackText = $("[data-studio-error]", root);
+    const saveState = $("[data-design-save-state]", root);
+    function actions(enabled) { ready = enabled; $$("[data-current-action]").forEach(button => button.disabled = !enabled); }
+    function edited() {
+      unsaved = true; requestToken++; clearTimeout(previewTimer); actions(false);
+      saveState.textContent = "有未保存修改";
+      $("[data-preview-state]").textContent = "等待更新";
+      $("[data-preview-state]").className = "pill running";
+    }
+    function showError(message) { feedbackText.textContent = message; feedback.hidden = false; }
+    jsonEditor.addEventListener("input", () => { jsonDirty = true; edited(); showError("参数文件尚未应用。点击「应用 JSON」，或恢复上次成功预览。"); });
+    form.addEventListener("submit", event => event.preventDefault());
 
     const control = name => $(`[data-parameter='${name}']`, form);
     const getValue = name => Number($("[data-number]", control(name)).value);
@@ -136,7 +148,17 @@
       return { ...base, authoring_mode: "basic", intent, linked_thickness: form.elements.linked_thickness.checked, camber_curve: null, suction_thickness_curve: null, pressure_thickness_curve: null, edge: null, resolution_residuals: {} };
     }
     async function preview(full = false, suppliedSpec = null) {
+      clearTimeout(previewTimer);
       const token = ++requestToken; const state = $("[data-preview-state]");
+      actions(false);
+      if (!suppliedSpec) {
+        if (jsonDirty) { showError("参数文件尚未应用，请先应用 JSON 或恢复上次成功预览。"); return false; }
+        const invalid = numeric.find(name => {
+          const input = $("[data-number]", control(name));
+          return input.value === "" || !Number.isFinite(Number(input.value)) || Number(input.value) < Number(input.min) || Number(input.value) > Number(input.max);
+        });
+        if (invalid) { showError("请填写有效数值，并保持在滑动条两端标注的范围内。"); state.textContent = "请检查参数"; return false; }
+      }
       try {
         state.textContent = full ? "完整验证…" : "计算中…"; state.className = "pill running";
         const payload = await fetchJSON("/api/v2/preview", { method: "POST", body: JSON.stringify(suppliedSpec || buildSpec()) });
@@ -145,27 +167,32 @@
         lastValidJSON = JSON.stringify(currentSpec, null, 2);
         if (suppliedSpec || !jsonDirty) { jsonEditor.value = lastValidJSON; jsonDirty = false; jsonError.textContent = ""; }
         state.textContent = "已同步"; state.className = "pill success";
+        feedback.hidden = true; actions(true); lastPreviewUnsaved = unsaved;
+        saveState.textContent = unsaved ? "有未保存修改" : "预览已就绪";
         renderStudio(payload); return true;
       } catch (error) {
-        if (token === requestToken) { state.textContent = "参数被拒绝"; state.className = "pill rejected"; }
-        jsonError.textContent = suppliedSpec ? error.message : ""; notice(error.message, true); return false;
+        if (token !== requestToken) return false;
+        state.textContent = "预览未更新"; state.className = "pill rejected";
+        jsonError.textContent = suppliedSpec ? error.message : "";
+        showError(`预览未成功，保存和导出已暂停。${error.message}`); return false;
       }
     }
-    const throttledPreview = debounce(() => preview(false), 150);
+    const throttledPreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(() => preview(false), 220); };
     $$('[data-parameter]', form).forEach(group => {
       const name = group.dataset.parameter; const number = $("[data-number]", group); const range = $("[data-range]", group);
       [number, range].forEach(input => input.addEventListener("input", () => {
-        if (input.value === "") return;
-        let value = Number(input.value); if (!Number.isFinite(value)) return;
-        value = Math.max(Number(input.min), Math.min(Number(input.max), value));
+        edited();
+        if (input.value === "" || !Number.isFinite(Number(input.value))) { showError("请输入数值，完成输入后会自动预览。"); return; }
+        let value = Number(input.value);
+        if (value < Number(input.min) || value > Number(input.max)) { showError(`请输入 ${input.min}–${input.max} 范围内的数值。`); return; }
         if (name === "stagger_deg") {
           const toAxial = value => activeReference === "axial" ? value : 90 - value;
           const localInlet = toAxial(getValue("inlet_metal_angle_deg")) - lastStagger;
           const localOutlet = toAxial(getValue("outlet_metal_angle_deg")) - lastStagger;
           value = Math.max(-84, -84 - localInlet, -84 - localOutlet, Math.min(84, 84 - localInlet, 84 - localOutlet, value));
         }
-        input.value = String(value);
-        (input === number ? range : number).value = input.value;
+        if (input === range || name === "stagger_deg") input.value = String(value);
+        (input === number ? range : number).value = String(value);
         if (name === "stagger_deg") {
           const delta = value - lastStagger; const direction = activeReference === "axial" ? 1 : -1;
           setValue("inlet_metal_angle_deg", getValue("inlet_metal_angle_deg") + direction * delta);
@@ -174,9 +201,8 @@
         }
         updateDerived(); throttledPreview();
       }));
-      [number, range].forEach(input => input.addEventListener("change", () => preview(true)));
     });
-    form.elements.linked_thickness.addEventListener("change", () => preview(true));
+    form.elements.linked_thickness.addEventListener("change", () => { edited(); preview(true); });
     referenceSelect.addEventListener("change", () => {
       const next = referenceSelect.value;
       if (next !== activeReference) {
@@ -190,14 +216,85 @@
     });
     $$('[data-analysis]').forEach(button => button.addEventListener("click", () => { analysisTab = button.dataset.analysis; $$('[data-analysis]').forEach(item => item.classList.toggle("active", item === button)); if (currentPayload) renderAnalysis(currentPayload); }));
     $("[data-reset-view]").addEventListener("click", () => { const chart = $("#profile-chart"); if (chart?._fullLayout) Plotly.relayout(chart, { "xaxis.autorange": true, "yaxis.autorange": true }); });
-    $("[data-apply-json]").addEventListener("click", async () => { try { const spec = JSON.parse(jsonEditor.value); if (await preview(true, spec)) syncFormFromSpec(currentSpec); } catch (error) { jsonError.textContent = "JSON 语法错误：" + error.message; } });
-    $("[data-revert-json]").addEventListener("click", () => { jsonEditor.value = lastValidJSON; jsonDirty = false; jsonError.textContent = ""; });
-    $("[data-copy-json]").addEventListener("click", async () => { await navigator.clipboard.writeText(jsonEditor.value); notice("Spec JSON 已复制"); });
-    $("[data-export-spec]").addEventListener("click", () => downloadJSON(`${currentPayload?.geometry.geometry_id || "cascade-forge"}.json`, currentSpec));
+    $("[data-apply-json]").addEventListener("click", async () => {
+      edited();
+      try { const raw = JSON.parse(jsonEditor.value); if (await preview(true, raw.spec || raw)) syncFormFromSpec(currentSpec); }
+      catch (error) { jsonError.textContent = "JSON 语法错误：" + error.message; showError(jsonError.textContent); }
+    });
+    function restorePreview() {
+      clearTimeout(previewTimer); requestToken++; jsonDirty = false; jsonError.textContent = "";
+      jsonEditor.value = lastValidJSON; syncFormFromSpec(currentSpec); feedback.hidden = true;
+      unsaved = lastPreviewUnsaved; saveState.textContent = unsaved ? "有未保存修改" : "已恢复上次成功预览";
+      if (currentPayload) {
+        actions(true); $("[data-preview-state]").textContent = "已同步";
+        $("[data-preview-state]").className = "pill success";
+      } else preview(true);
+    }
+    $("[data-revert-json]").addEventListener("click", restorePreview);
+    $("[data-restore-preview]").addEventListener("click", restorePreview);
+    $("[data-copy-json]").addEventListener("click", async () => { try { await navigator.clipboard.writeText(jsonEditor.value); notice("设计参数已复制"); } catch { notice("复制失败，可选中参数文本手动复制。", true); } });
+    $("[data-export-spec]").addEventListener("click", () => { if (ready) downloadJSON(`${currentPayload.geometry.geometry_id}-spec.json`, currentSpec); });
+    $("[data-export-coordinates]").addEventListener("click", () => {
+      if (!ready) return;
+      const rows = ["side,point,x_over_c,y_over_c"];
+      for (const side of ["suction", "pressure"]) currentPayload.geometry[side].forEach((point, index) => rows.push([side, index, ...point].join(",")));
+      const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+      link.download = `${currentPayload.geometry.geometry_id}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
+    function normalizeTags(tags) { return (Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[,，]/) : []).filter(tag => typeof tag === "string").map(tag => tag.trim()).filter(Boolean); }
+    function mayReplace() { return !unsaved || window.confirm("当前设计有未保存修改。要放弃这些修改并打开另一个设计吗？"); }
+    async function loadDesign(record) {
+      if (!mayReplace()) return false;
+      clearTimeout(previewTimer);
+      if (!await preview(true, record.spec)) throw new Error(feedbackText.textContent || "无法打开设计，请重试。");
+      syncFormFromSpec(currentSpec); unsaved = lastPreviewUnsaved = false;
+      designName = String(record.name || "未命名叶型").slice(0, 120); designTags = normalizeTags(record.tags);
+      $("[data-design-label]").textContent = `${designName}${record.revision ? ` · 修订 ${record.revision}` : ""}`;
+      saveState.textContent = "已打开保存的设计";
+      return true;
+    }
+    window.CFStudio = { loadDesign };
     const fileInput = $("[data-spec-file]"); $("[data-import-spec]").addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", async () => { if (!fileInput.files[0]) return; jsonEditor.value = await fileInput.files[0].text(); jsonDirty = true; $(".json-panel", form).open = true; jsonError.textContent = "点击“应用 JSON”后生效。"; });
-    const dialog = $("#workspace-dialog"); $("[data-save-workspace]").addEventListener("click", () => dialog.showModal());
-    dialog.addEventListener("close", async () => { if (dialog.returnValue !== "save" || !currentPayload) return; const data = new FormData($("form", dialog)); try { const saved = await fetchJSON("/api/v2/workspace/designs", { method: "POST", body: JSON.stringify({ name: data.get("name"), tags: String(data.get("tags") || "").split(",").map(v => v.trim()).filter(Boolean), spec: currentSpec }) }); notice(`已保存 ${saved.design_id}`); } catch (error) { notice(error.message, true); } });
+    fileInput.addEventListener("change", async () => {
+      if (!fileInput.files[0]) return;
+      try {
+        const data = JSON.parse(await fileInput.files[0].text());
+        if (!mayReplace()) return;
+        if (!await preview(true, data.spec || data)) return;
+        syncFormFromSpec(currentSpec); designName = String(data.name || "导入设计").slice(0, 120); designTags = normalizeTags(data.tags);
+        unsaved = lastPreviewUnsaved = true; $("[data-design-label]").textContent = designName;
+        saveState.textContent = "已导入，尚未保存"; notice("设计已导入并更新预览");
+      } catch (error) { showError(`无法导入设计：${error.message}`); }
+      finally { fileInput.value = ""; }
+    });
+    const dialog = $("#workspace-dialog"), saveForm = $("form", dialog), saveError = $("[data-save-error]", dialog);
+    let saving = false;
+    $("[data-save-workspace]").addEventListener("click", () => {
+      if (!ready) return;
+      saveForm.elements.name.value = designName; saveForm.elements.tags.value = designTags.join(", ");
+      saveError.textContent = ""; dialog.showModal();
+    });
+    $("[data-cancel-save]", dialog).addEventListener("click", () => { if (!saving) dialog.close(); });
+    dialog.addEventListener("cancel", event => { if (saving) event.preventDefault(); });
+    saveForm.addEventListener("submit", async event => {
+      event.preventDefault(); if (saving || !ready) return;
+      const name = saveForm.elements.name.value.trim();
+      if (!name) { saveError.textContent = "请填写设计名称。"; saveForm.elements.name.focus(); return; }
+      const tags = saveForm.elements.tags.value.split(/[,，]/).map(value => value.trim()).filter(Boolean);
+      const submittedSpec = structuredClone(currentSpec), token = requestToken;
+      saving = true; saveError.textContent = "";
+      $$("button, input", saveForm).forEach(node => node.disabled = true);
+      try {
+        const saved = await fetchJSON("/api/v2/workspace/designs", { method: "POST", body: JSON.stringify({ name, tags, spec: submittedSpec }) });
+        if (token === requestToken) { unsaved = lastPreviewUnsaved = false; designName = name; designTags = tags; $("[data-design-label]").textContent = name; saveState.textContent = "已保存，可从「我的设计」重新打开"; }
+        dialog.close(); notice(`已保存「${name}」`);
+        document.dispatchEvent(new CustomEvent("cf:design-saved", { detail: saved }));
+      } catch (error) { saveError.textContent = `保存失败，请重试：${error.message}`; }
+      finally { saving = false; $$("button, input", saveForm).forEach(node => node.disabled = false); }
+    });
+    window.addEventListener("beforeunload", event => { if (unsaved) { event.preventDefault(); event.returnValue = ""; } });
+    $("[data-show-controls]").addEventListener("change", () => { if (currentPayload) renderStudio(currentPayload); });
+    $(".studio-diagnostics").addEventListener("toggle", () => { if ($(".studio-diagnostics").open && currentPayload) renderStudio(currentPayload); });
 
     function renderStudio(payload) {
       const geometry = payload.geometry; const placed = payload.placement; const controls = placed.control_points;
@@ -205,14 +302,14 @@
         { ...xy(placed.suction), type: "scatter", mode: "lines", name: "吸力面", line: { color: colors.blue, width: 2.4 } },
         { ...xy(placed.pressure), type: "scatter", mode: "lines", name: "压力面", line: { color: colors.orange, width: 2.4 } },
         { ...xy(placed.camber), type: "scatter", mode: "lines", name: "中弧线", line: { color: colors.muted, width: 1.3, dash: "dash" } },
-        { ...xy(controls), type: "scatter", mode: "lines+markers", name: "控制多边形", line: { color: "rgba(0,113,227,.35)", dash: "dot" }, marker: { size: 7, color: "white", line: { color: colors.blue, width: 1.5 } } },
+        { ...xy(controls), type: "scatter", mode: "lines+markers", name: "控制多边形", visible: $("[data-show-controls]").checked, line: { color: "rgba(0,113,227,.35)", dash: "dot" }, marker: { size: 7, color: "white", line: { color: colors.blue, width: 1.5 } } },
         { ...xy(placed.chord), type: "scatter", mode: "lines", name: "弦线", line: { color: colors.ink, width: 1.3 } },
         { ...xy(placed.axial_reference), type: "scatter", mode: "lines", name: "轴向基准", line: { color: "#b8b8bd", width: 1, dash: "dashdot" } },
         { ...xy(placed.stagger_arc), type: "scatter", mode: "lines", name: "安装角", line: { color: colors.green, width: 2 } }
       ];
       Charts.render("profile-chart", traces, { xaxis: { title: "轴向 x/c", constrain: "domain", zeroline: false }, yaxis: { title: "切向 y/c", scaleanchor: "x", scaleratio: 1, zeroline: false }, uirevision: `${geometry.geometry_id}:${placed.stagger_deg}`, annotations: [{ x: placed.stagger_arc.at(-1)[0], y: placed.stagger_arc.at(-1)[1], text: `γ = ${placed.stagger_deg.toFixed(2)}°`, showarrow: false, xshift: 18, yshift: 10 }] });
       $("[data-geometry-id]").textContent = geometry.geometry_id; $("[data-intent-id]").textContent = geometry.intent_id;
-      const validation = $("[data-validation-status]"); validation.textContent = payload.validation.status; validation.className = `pill ${payload.validation.status}`;
+      const validation = $("[data-validation-status]"); validation.textContent = ({ valid: "几何有效", warning: "有几何警告", rejected: "几何未通过" })[payload.validation.status] || payload.validation.status; validation.className = `pill ${payload.validation.status}`;
       $("[data-le-radius]").textContent = `r/c = ${geometry.edge_metrics.leading_edge_radius_ratio.toExponential(4)}`;
       $("[data-te-radius]").textContent = `r/c = ${geometry.edge_metrics.trailing_edge_radius_ratio.toExponential(4)}`;
       renderEdge("le-chart", payload, "leading"); renderEdge("te-chart", payload, "trailing"); renderAnalysis(payload);

@@ -132,6 +132,17 @@ legend { padding: 0; font-size: 13px; font-weight: 700; }
 .segmented button { padding: 7px; border-radius: 7px; color: var(--muted); }
 .segmented button.active { background: white; color: var(--text); box-shadow: 0 1px 4px rgb(0 0 0 / 10%); font-weight: 650; }
 .studio-main { min-width: 0; }
+.studio-options { padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+.studio-options > :not(summary) { margin-top: 12px; }
+.studio-options summary, .studio-diagnostics summary { cursor: pointer; font-weight: 650; }
+.studio-diagnostics { margin-top: 18px; }
+.studio-diagnostics[open] > summary { margin-bottom: 14px; }
+.studio-current { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.studio-current [data-design-label] { color: var(--text); font-weight: 650; }
+.studio-feedback { padding: 12px; margin-bottom: 12px; border: 1px solid #f2c7cc; border-radius: 8px; background: #fff7f8; }
+.studio-feedback p { color: var(--danger); overflow-wrap: anywhere; margin-bottom: 8px; }
+.studio-chart-actions { padding: 12px 0; justify-content: space-between; }
+.studio-chart-actions .switch-row { gap: 6px; }
 .canvas-card { overflow: hidden; }
 .chart-frame { position: relative; width: 100%; min-width: 0; overflow: hidden; }
 .profile-frame { height: clamp(380px, 46vw, 610px); }

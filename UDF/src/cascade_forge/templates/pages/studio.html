@@ -7,14 +7,15 @@
 </div>
 {%- endmacro %}
 {% block page_title %}叶型工作室{% endblock %}
-{% block toolbar_actions %}<button class="button" type="button" data-import-spec>导入 spec</button><button class="button" type="button" data-export-spec>导出 spec</button><button class="button primary" type="button" data-save-workspace>保存到 Workspace</button>{% endblock %}
+{% block extra_scripts %}<link rel="stylesheet" href="/static/workspace.css?v=1"><script src="/static/workspace.js?v=2" defer></script>{% endblock %}
+{% block toolbar_actions %}<button class="button" type="button" data-open-workspace>我的设计</button><button class="button" type="button" data-import-spec>导入设计</button><button class="button" type="button" data-export-spec data-current-action disabled>下载设计参数</button><button class="button primary" type="button" data-save-workspace data-current-action disabled>保存设计</button>{% endblock %}
 {% block content %}
 <div class="studio-layout" data-studio-root data-default-spec='{{ default_spec_v2|tojson }}'>
   <aside class="surface-card inspector">
     <form id="studio-form" class="inspector-form">
-      <fieldset><legend>统一内核</legend><p class="field-help">三次开放夹持 B-spline · 法向加厚 · 端点 G2 · 密切圆半径</p><label class="switch-row"><span>双侧厚度联动</span><input type="checkbox" name="linked_thickness" checked></label></fieldset>
+      <p class="field-help">先调角度和厚度，轮廓会自动更新。t/c = 0.10 表示厚度为弦长的 10%。</p>
       <fieldset><legend>截面主参数</legend>
-        <div class="reference-control"><label for="metal-angle-reference">金属角参考方向</label>{{ tooltip('轴向：NASA 轴流叶栅定义，从正轴向量起。切向：ANSYS BladeGen 的互补 Beta 表示，βt = 90° − βa。切换只换算显示值，不改变叶型。') }}<select id="metal-angle-reference" name="metal_angle_reference"><option value="axial">轴向（NASA）</option><option value="tangential">切向（ANSYS）</option></select></div>
+
         {{ parameter('inlet_metal_angle_deg', '进口金属角 βLE', -84, 84, 0.1, '前缘处中弧线切线方向，不是进口流动角。正角从轴向转向画布正切向。') }}
         {{ parameter('outlet_metal_angle_deg', '出口金属角 βTE', -84, 84, 0.1, '尾缘处中弧线切线方向，不是出口流动角。') }}
         {{ parameter('stagger_deg', '安装角 γ（轴向）', -84, 84, 0.1, 'NASA 定义：弦线与正轴向的夹角。改变安装角只刚体旋转叶型，并同步两端金属角。') }}
@@ -22,7 +23,7 @@
         {{ parameter('max_thickness_ratio', '最大厚度 t/c', 0.03, 0.18, 0.001) }}
         {{ parameter('max_thickness_x_ratio', '最大厚度位置 x/c', 0.20, 0.65, 0.005) }}
       </fieldset>
-      <fieldset><legend>局部形状参数</legend>
+      <details class="studio-options"><summary>更多形状参数与角度设置</summary><p class="field-help">需要精修头尾和局部形状时展开；初次使用可保持默认值。LE 是前缘，TE 是尾缘，r/c 表示密切圆半径与弦长之比。</p>        <div class="reference-control"><label for="metal-angle-reference">金属角参考方向</label>{{ tooltip('轴向：NASA 轴流叶栅定义，从正轴向量起。切向：ANSYS BladeGen 的互补 Beta 表示，βt = 90° − βa。切换只换算显示值，不改变叶型。') }}<select id="metal-angle-reference" name="metal_angle_reference"><option value="axial">轴向（NASA）</option><option value="tangential">切向（ANSYS）</option></select></div><label class="switch-row"><span>双侧厚度联动</span><input type="checkbox" name="linked_thickness" checked></label><fieldset><legend>局部形状参数</legend>
         {{ parameter('leading_edge_radius_ratio', 'LE 密切半径 r/c', 0.0005, 0.03, 0.0001) }}
         {{ parameter('trailing_edge_radius_ratio', 'TE 密切半径 r/c', 0.0001, 0.02, 0.0001) }}
         {{ parameter('camber_le_tangent_ratio', '进口切向柄长', 0.03, 1.2, 0.01) }}
@@ -30,14 +31,16 @@
         {{ parameter('fore_shape_factor', '前段形状因子', 0.5, 1.8, 0.05) }}
         {{ parameter('aft_shape_factor', '后段形状因子', 0.5, 1.8, 0.05) }}
       </fieldset>
-      <details class="json-panel"><summary>后台 Spec JSON</summary><p class="field-help">显示后端最后一次成功解析的完整合同。修改后点击“应用 JSON”。</p><textarea name="explicit_spec" rows="15" spellcheck="false"></textarea><p class="json-error" data-json-error role="alert"></p><div class="button-row"><button class="button primary" type="button" data-apply-json>应用 JSON</button><button class="button" type="button" data-revert-json>恢复</button><button class="button" type="button" data-copy-json>复制</button></div></details>
+      </details>
+      <details class="json-panel"><summary>设计参数文件（Spec JSON）</summary><p class="field-help">显示后端最后一次成功解析的完整合同。修改后点击“应用 JSON”。</p><textarea name="explicit_spec" rows="15" spellcheck="false"></textarea><p class="json-error" data-json-error role="alert"></p><div class="button-row"><button class="button primary" type="button" data-apply-json>应用 JSON</button><button class="button" type="button" data-revert-json>恢复</button><button class="button" type="button" data-copy-json>复制</button></div></details>
     </form>
   </aside>
-  <section class="studio-main">
-    <article class="surface-card canvas-card"><div class="card-heading"><div><p class="eyebrow">AXIAL–TANGENTIAL PREVIEW</p><h2>安装后的完整叶型轮廓</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div></div><div class="geometry-meta"><code data-geometry-id>—</code><span data-validation-status class="pill">—</span><span data-intent-id>—</span></div></article>
-    <article class="surface-card analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">金属线角度</button></div><div id="analysis-chart" class="plotly-chart analysis-chart"></div></article>
+  <section class="studio-main"><div class="studio-current"><span data-design-label>未命名叶型</span><span data-design-save-state role="status">预览准备中</span></div><div class="studio-feedback" data-studio-feedback hidden><p data-studio-error role="alert"></p><button class="button" type="button" data-restore-preview>恢复上次成功预览</button></div>
+    <article class="surface-card canvas-card"><div class="card-heading"><div><p class="eyebrow">AXIAL–TANGENTIAL PREVIEW</p><h2>叶型预览</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div></div><div class="button-row studio-chart-actions"><label class="switch-row"><input type="checkbox" data-show-controls> 显示控制线</label><button class="button" type="button" data-export-coordinates data-current-action disabled>下载叶面坐标 CSV</button></div><div class="geometry-meta"><code data-geometry-id>—</code><span data-validation-status class="pill">—</span><span data-intent-id>—</span></div></article>
+    <details class="surface-card studio-diagnostics"><summary>形状检查：厚度、曲率与头尾放大</summary><p class="field-help">厚度看分布，曲率看局部平顺性；这些图用于检查几何形状。</p><article class="analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">金属线角度</button></div><div id="analysis-chart" class="plotly-chart analysis-chart"></div></article>
     <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span data-le-radius class="mono-value">—</span></div><div id="le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span data-te-radius class="mono-value">—</span></div><div id="te-chart" class="plotly-chart edge-chart"></div></article></div>
+    </details>
   </section>
 </div>
-<dialog id="workspace-dialog"><form method="dialog" class="dialog-form"><h2>保存到 Workspace</h2><label>设计名称<input name="name" value="未命名叶型" required></label><label>标签<input name="tags" placeholder="逗号分隔"></label><div class="button-row"><button class="button" value="cancel">取消</button><button class="button primary" value="save">保存修订</button></div></form></dialog><input type="file" accept="application/json" hidden data-spec-file>
+<dialog id="workspace-dialog" aria-labelledby="save-design-title"><form class="dialog-form"><h2 id="save-design-title">保存设计</h2><p class="field-help">同名保存会新增修订，保留之前的版本。</p><label>设计名称<input name="name" value="未命名叶型" maxlength="120" required></label><label>标签<input name="tags" placeholder="逗号分隔"></label><p class="json-error" data-save-error role="alert"></p><div class="button-row"><button class="button" type="button" data-cancel-save>取消</button><button class="button primary" type="submit">保存修订</button></div></form></dialog>{% include "partials/workspace-browser.html" %}<input type="file" accept="application/json" hidden data-spec-file>
 {% endblock %}

@@ -6,11 +6,11 @@
   <meta name="color-scheme" content="light">
   <title>{% block title %}Cascade Forge{% endblock %}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/app.css?v=2.1-naca-normal">
+  <link rel="stylesheet" href="/static/app.css?v=2.2-simple-workflow">
   <link rel="stylesheet" href="/static/guidance.css?v=2.2-simple-workflow">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
-  <script src="/static/app.js?v=2.2-simple-workflow" defer></script>
+  <script src="/static/app.js?v=2.2-simple-workflow.2" defer></script>
   {% block extra_scripts %}{% endblock %}
 </head>
 <body data-page="{{ page|default('overview') }}">
@@ -47,7 +47,7 @@
     {% set page_guides = {
       'studio': {
         'purpose': '调整参数设计二维叶型，保存后可以继续编辑。',
-        'steps': ['先调进出口角、安装角与厚度，观察右侧轮廓变化。', '需要精修时展开高级参数；检查图表后保存设计。', '下载参数文件可以备份，也可以从已保存设计继续编辑。'],
+        'steps': ['先调进出口角、安装角与厚度，观察右侧轮廓变化。', '需要精修时展开更多形状参数；检查图表后保存设计。', '下载参数文件可以备份，也可以从已保存设计继续编辑。'],
         'links': [('/naca65', '用标准 NACA 65 叶型起步')]
       },
       'database': {

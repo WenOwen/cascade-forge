@@ -173,7 +173,7 @@
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      status.textContent = "已下载 JSON 备份；可在工作室通过“导入参数”重新使用。";
+      status.textContent = "已下载 JSON 备份；可在工作室通过“导入设计”重新使用。";
     });
   }
 
