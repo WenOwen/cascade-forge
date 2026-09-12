@@ -149,7 +149,10 @@ legend { padding: 0; font-size: 13px; font-weight: 700; }
 .edge-chart { height: 330px; }
 
 .filter-bar { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)) auto; align-items: end; gap: 10px; }
-.table-toolbar { margin: 18px 0 8px; color: var(--muted); }
+.table-toolbar { margin: 18px 0 8px; color: var(--muted); flex-wrap: wrap; }
+[data-database-error], [data-compare-error] { color: var(--red); overflow-wrap: anywhere; }
+.detail-dialog h2 { overflow-wrap: anywhere; }
+.detail-dialog pre { max-width: 100%; overflow: auto; }
 .table-scroll { width: 100%; min-width: 0; overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .data-table th { color: var(--muted); font-weight: 600; white-space: nowrap; }

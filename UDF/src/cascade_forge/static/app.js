@@ -237,13 +237,92 @@
   }
 
   function initDatabase() {
-    const root = $("[data-database-root]"); if (!root) return; const form = $("[data-database-filters]"); let offset = 0; const limit = 50; const selected = new Set();
-    async function load() { const query = new URLSearchParams({ limit, offset }); new FormData(form).forEach((value, key) => value && query.set(key, value)); try { const data = await fetchJSON(`/api/v2/geometries?${query}`); $("[data-database-count]").textContent = `${data.total} 条记录`; $("[data-page-label]").textContent = `第 ${Math.floor(offset / limit) + 1} 页`; $("[data-database-body]").innerHTML = data.items.map(row => `<tr><td><input type="checkbox" data-select-id="${escapeHTML(row.geometry_id)}" ${selected.has(row.geometry_id) ? "checked" : ""}></td><td><code>${escapeHTML(row.geometry_id)}</code></td><td>${escapeHTML(row.kernel)}</td><td>${statusPill(row.validation_status)}</td><td>${Number(row.max_thickness_ratio).toFixed(5)}</td><td>${Number(row.max_thickness_x_ratio).toFixed(5)}</td><td>${Number(row.inlet_metal_angle_deg).toFixed(2)}°</td><td><button class="button" data-view-id="${escapeHTML(row.geometry_id)}">详情</button></td></tr>`).join("") || `<tr><td colspan="8" class="empty-state">没有匹配记录</td></tr>`; bindRows(); } catch (error) { notice(error.message, true); } }
-    function bindRows() { $$('[data-select-id]').forEach(box => box.addEventListener("change", () => { box.checked ? selected.add(box.dataset.selectId) : selected.delete(box.dataset.selectId); $("[data-compare-selected]").disabled = selected.size < 2; $("[data-export-selected]").disabled = selected.size !== 1; })); $$('[data-view-id]').forEach(button => button.addEventListener("click", () => showDetail(button.dataset.viewId))); }
-    async function showDetail(id) { try { const data = await fetchJSON(`/api/v2/geometries/${id}`); const dialog = $("#geometry-detail"); $("[data-detail-content]").innerHTML = `<p class="eyebrow">GEOMETRY DETAIL</p><h2><code>${escapeHTML(id)}</code></h2><div id="detail-chart" class="plotly-chart analysis-chart"></div><pre>${escapeHTML(JSON.stringify(data.features, null, 2))}</pre>`; dialog.showModal(); const g = data.geometry; Charts.render("detail-chart", [{ ...xy(g.suction), name: "SS", line: { color: colors.blue } }, { ...xy(g.pressure), name: "PS", line: { color: colors.orange } }], { yaxis: { scaleanchor: "x", scaleratio: 1 }, xaxis: { title: "x/c" } }); } catch (error) { notice(error.message, true); } }
-    form.addEventListener("submit", event => { event.preventDefault(); offset = 0; load(); }); $("[data-page-prev]").addEventListener("click", () => { offset = Math.max(0, offset - limit); load(); }); $("[data-page-next]").addEventListener("click", () => { offset += limit; load(); }); $("[data-close-dialog]").addEventListener("click", () => $("#geometry-detail").close());
-    $("[data-compare-selected]").addEventListener("click", () => { sessionStorage.setItem("cf-compare", [...selected].join("\n")); location.href = "/compare"; });
-    $("[data-export-selected]").addEventListener("click", () => { const id = [...selected][0]; location.href = `/api/v2/geometries/${encodeURIComponent(id)}/export`; }); load();
+    const root = $("[data-database-root]"); if (!root) return;
+    const form = $("[data-database-filters]", root);
+    const body = $("[data-database-body]", root);
+    const prev = $("[data-page-prev]", root), next = $("[data-page-next]", root);
+    const selectPage = $("[data-select-page]", root);
+    const errorNode = $("[data-database-error]", root), retry = $("[data-database-retry]", root);
+    const selected = new Set();
+    let offset = 0, total = 0, rows = [], busy = false, requestId = 0;
+    let filters = new URLSearchParams(location.search);
+    for (const name of ["origin", "status", "sort", "descending", "limit", "search"]) {
+      if (filters.has(name)) form.elements[name].value = filters.get(name);
+    }
+    if (!["25", "50", "100"].includes(form.elements.limit.value)) form.elements.limit.value = "50";
+    if (!form.elements.sort.value) form.elements.sort.value = "geometry_id";
+    if (!form.elements.descending.value) form.elements.descending.value = "false";
+    offset = Math.max(0, Number.parseInt(filters.get("offset"), 10) || 0);
+    function readFilters() { filters = new URLSearchParams(new FormData(form)); filters.set("search", form.elements.search.value.trim()); }
+    readFilters();
+    function updateControls() {
+      const limit = Number(filters.get("limit"));
+      prev.disabled = busy || offset === 0; next.disabled = busy || offset + limit >= total;
+      $("[data-selection-count]", root).textContent = `已选 ${selected.size} 条（跨页保留）`;
+      $("[data-clear-selected]", root).disabled = selected.size === 0;
+      $("[data-compare-selected]", root).disabled = selected.size < 2 || selected.size > 12;
+      $("[data-export-selected]", root).disabled = selected.size !== 1;
+      const checked = rows.filter(row => selected.has(row.geometry_id)).length;
+      selectPage.disabled = busy || !rows.length;
+      selectPage.checked = rows.length > 0 && checked === rows.length;
+      selectPage.indeterminate = checked > 0 && checked < rows.length;
+      $$("[data-select-id]", root).forEach(box => { box.checked = selected.has(box.dataset.selectId); });
+    }
+    async function load() {
+      const sequence = ++requestId, limit = Number(filters.get("limit"));
+      const query = new URLSearchParams(filters); query.set("offset", offset);
+      busy = true; rows = []; updateControls(); root.setAttribute("aria-busy", "true");
+      errorNode.hidden = retry.hidden = true;
+      body.innerHTML = '<tr><td colspan="8" class="empty-state">正在加载叶型…</td></tr>';
+      $("[data-database-count]", root).textContent = "正在读取记录…";
+      try {
+        const data = await fetchJSON(`/api/v2/geometries?${query}`);
+        if (sequence !== requestId) return;
+        total = data.total;
+        if (offset > 0 && offset >= total) { offset = Math.max(0, Math.ceil(total / limit) - 1) * limit; return load(); }
+        rows = data.items;
+        history.replaceState(null, "", `/database?${query}`);
+        $("[data-database-count]", root).textContent = total ? `${total} 条记录 · 显示 ${offset + 1}–${offset + rows.length}` : "0 条匹配记录";
+        $("[data-page-label]", root).textContent = total ? `第 ${Math.floor(offset / limit) + 1} / ${Math.ceil(total / limit)} 页` : "无匹配记录";
+        body.innerHTML = rows.map(row => `<tr><td><input type="checkbox" data-select-id="${escapeHTML(row.geometry_id)}" aria-label="选择 ${escapeHTML(row.geometry_id)}"></td><td><code>${escapeHTML(row.geometry_id)}</code></td><td>${escapeHTML(row.kernel)}</td><td>${statusPill(row.validation_status)}</td><td>${Number(row.max_thickness_ratio).toFixed(5)}</td><td>${Number(row.max_thickness_x_ratio).toFixed(5)}</td><td>${Number(row.inlet_metal_angle_deg).toFixed(2)}°</td><td><button class="button" data-view-id="${escapeHTML(row.geometry_id)}">详情</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">没有匹配记录，请调整或重置筛选；尚未生成数据时可前往「数据集与批次」。</td></tr>';
+      } catch (error) {
+        if (sequence !== requestId) return;
+        total = 0; body.innerHTML = '<tr><td colspan="8" class="empty-state">加载失败</td></tr>';
+        errorNode.textContent = `无法加载叶型：${error.message}`; errorNode.hidden = retry.hidden = false;
+        $("[data-database-count]", root).textContent = "记录数暂不可用";
+        $("[data-page-label]", root).textContent = "请重试";
+      } finally {
+        if (sequence === requestId) { busy = false; root.setAttribute("aria-busy", "false"); updateControls(); }
+      }
+    }
+    body.addEventListener("change", event => {
+      const box = event.target.closest("[data-select-id]"); if (!box) return;
+      box.checked ? selected.add(box.dataset.selectId) : selected.delete(box.dataset.selectId); updateControls();
+    });
+    body.addEventListener("click", async event => {
+      const button = event.target.closest("[data-view-id]"); if (!button) return;
+      button.disabled = true;
+      try {
+        const id = button.dataset.viewId, encoded = encodeURIComponent(id);
+        const data = await fetchJSON(`/api/v2/geometries/${encoded}`);
+        const dialog = $("#geometry-detail");
+        $("[data-detail-content]").innerHTML = `<p class="eyebrow">GEOMETRY DETAIL</p><h2><code>${escapeHTML(id)}</code></h2><div class="button-row"><a class="button" href="/api/v2/geometries/${encoded}/export?format=csv">下载 CSV 坐标</a><a class="button" href="/api/v2/geometries/${encoded}/export?format=json">下载 JSON 几何</a><a class="button" href="/cascade?geometry_id=${encoded}">检查叶栅</a></div><div id="detail-chart" class="plotly-chart analysis-chart"></div><details><summary>完整几何特征</summary><pre>${escapeHTML(JSON.stringify(data.features, null, 2))}</pre></details>`;
+        if (!dialog.open) dialog.showModal();
+        const g = data.geometry;
+        await Charts.render("detail-chart", [{ ...xy(g.suction), name: "吸力面", line: { color: colors.blue } }, { ...xy(g.pressure), name: "压力面", line: { color: colors.orange } }], { yaxis: { scaleanchor: "x", scaleratio: 1, title: "y/c" }, xaxis: { title: "x/c" } });
+      } catch (error) { notice(error.message, true); } finally { button.disabled = false; }
+    });
+    selectPage.addEventListener("change", () => { rows.forEach(row => selectPage.checked ? selected.add(row.geometry_id) : selected.delete(row.geometry_id)); updateControls(); });
+    $("[data-clear-selected]", root).addEventListener("click", () => { selected.clear(); updateControls(); });
+    form.addEventListener("submit", event => { event.preventDefault(); offset = 0; readFilters(); load(); });
+    form.addEventListener("reset", () => setTimeout(() => { offset = 0; readFilters(); load(); }, 0));
+    prev.addEventListener("click", () => { offset = Math.max(0, offset - Number(filters.get("limit"))); load(); });
+    next.addEventListener("click", () => { offset += Number(filters.get("limit")); load(); });
+    retry.addEventListener("click", load);
+    $("[data-close-dialog]").addEventListener("click", () => $("#geometry-detail").close());
+    $("[data-compare-selected]", root).addEventListener("click", () => { sessionStorage.setItem("cf-compare", [...selected].join("\n")); location.href = "/compare"; });
+    $("[data-export-selected]", root).addEventListener("click", () => { const id = [...selected][0]; location.href = `/api/v2/geometries/${encodeURIComponent(id)}/export?format=${$("[data-export-format]", root).value}`; });
+    load();
   }
 
   function initCompare() {
@@ -252,7 +331,7 @@
   }
 
   function initCascade() {
-    const form = $("[data-cascade-form]"); if (!form) return; const range = form.elements.solidity; range.addEventListener("input", () => $("output[data-for='solidity']").textContent = Number(range.value).toFixed(2)); form.addEventListener("submit", async event => { event.preventDefault(); try { const data = await fetchJSON("/api/v2/cascade", { method: "POST", body: JSON.stringify({ geometry_id: form.elements.geometry_id.value.trim(), solidity: Number(range.value) }) }); const traces = []; data.passages.forEach((passage, index) => { traces.push({ ...xy(passage.suction), name: `SS ${passage.offset}`, line: { color: index === 1 ? colors.blue : "#b7b7bc" } }, { ...xy(passage.pressure), name: `PS ${passage.offset}`, line: { color: index === 1 ? colors.orange : "#d0d0d4" } }); }); Charts.render("cascade-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "节距方向 y/c" }, xaxis: { title: "x/c" }, showlegend: false }); $("[data-cascade-summary]").innerHTML = `<dl class="definition-grid"><dt>状态</dt><dd>${statusPill(data.validation.status)}</dd><dt>节距 c</dt><dd>${data.pitch_ratio.toFixed(5)}</dd><dt>喉道代理</dt><dd>${Number(data.validation.metrics.cascade_throat_proxy_ratio).toFixed(5)}</dd></dl>`; } catch (error) { notice(error.message, true); } });
+    const form = $("[data-cascade-form]"); if (!form) return; const linkedId = new URLSearchParams(location.search).get("geometry_id"); if (linkedId) form.elements.geometry_id.value = linkedId; const range = form.elements.solidity; range.addEventListener("input", () => $("output[data-for='solidity']").textContent = Number(range.value).toFixed(2)); form.addEventListener("submit", async event => { event.preventDefault(); try { const data = await fetchJSON("/api/v2/cascade", { method: "POST", body: JSON.stringify({ geometry_id: form.elements.geometry_id.value.trim(), solidity: Number(range.value) }) }); const traces = []; data.passages.forEach((passage, index) => { traces.push({ ...xy(passage.suction), name: `SS ${passage.offset}`, line: { color: index === 1 ? colors.blue : "#b7b7bc" } }, { ...xy(passage.pressure), name: `PS ${passage.offset}`, line: { color: index === 1 ? colors.orange : "#d0d0d4" } }); }); Charts.render("cascade-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "节距方向 y/c" }, xaxis: { title: "x/c" }, showlegend: false }); $("[data-cascade-summary]").innerHTML = `<dl class="definition-grid"><dt>状态</dt><dd>${statusPill(data.validation.status)}</dd><dt>节距 c</dt><dd>${data.pitch_ratio.toFixed(5)}</dd><dt>喉道代理</dt><dd>${Number(data.validation.metrics.cascade_throat_proxy_ratio).toFixed(5)}</dd></dl>`; } catch (error) { notice(error.message, true); } });
   }
 
   function initAnchors() {
