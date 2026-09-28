@@ -81,6 +81,7 @@ def test_native_generator_matches_pinned_openvsp_sixseries(
 def test_compressor_designation_maps_to_general_parameters() -> None:
     preset = parse_naca65_designation("NACA 65-(12)10")
     general = NACA65Spec(
+        family="65-compressor",
         thickness_ratio=0.10,
         design_lift_coefficient=1.2,
         loading_parameter_a=1.0,

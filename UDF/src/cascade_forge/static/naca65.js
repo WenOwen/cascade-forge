@@ -57,10 +57,11 @@
   }
 
   function updateFamily() {
-    const fixed = form.elements.family.value === "65A";
+    const compressor = form.elements.family.value === "65-compressor";
+    const fixed = compressor || form.elements.family.value === "65A";
     const group = $("[data-naca-parameter='loading_parameter_a']", root);
     $$('input', group).forEach(input => input.disabled = fixed);
-    if (fixed) $$('input', group).forEach(input => input.value = "0.8");
+    if (fixed) $$('input', group).forEach(input => input.value = compressor ? "1.0" : "0.8");
   }
 
   async function buildSpec() {
@@ -73,7 +74,7 @@
     }
     return {
       schema_version: "1.0.0",
-      algorithm_version: "nasa-sixseries-1974-python-v1",
+      algorithm_version: form.elements.family.value === "65-compressor" ? "naca65-compressor-table-v1" : "nasa-sixseries-1974-python-v1",
       family: form.elements.family.value,
       thickness_ratio: Number(form.elements.thickness_ratio.value),
       design_lift_coefficient: Number(form.elements.design_lift_coefficient.value),
@@ -130,6 +131,10 @@
   function renderResult(payload) {
     const reference = payload.reference;
     const fitted = payload.fitted_geometry;
+    $("[data-naca-export-dat]", root).disabled = false;
+    const datSource = $("[data-naca-dat-source]", root);
+    datSource.querySelector('[value="fitted"]').disabled = !fitted;
+    if (!fitted) datSource.value = "native";
     const traces = [
       { ...xy(reference.normalized_suction), mode: "lines", name: "NACA 原生 SS", line: { color: colors.blue, width: 2.6 } },
       { ...xy(reference.normalized_pressure), mode: "lines", name: "NACA 原生 PS", line: { color: colors.orange, width: 2.6 } },
@@ -143,7 +148,8 @@
       );
       const crossSections = [];
       for (let i = 10; i < fitted.camber.length - 10; i += 10) {
-        crossSections.push(fitted.pressure[i], fitted.camber[i], fitted.suction[i], [null, null]);
+        if (fitted.spec.trailing_edge === "rounded" && fitted.camber[i][0] > 0.95) continue;
+        crossSections.push((fitted.metadata.body_pressure || fitted.pressure)[i], fitted.camber[i], (fitted.metadata.body_suction || fitted.suction)[i], [null, null]);
       }
       traces.push({ ...xy(crossSections), mode: "lines", name: "法向厚度连线", hoverinfo: "skip",
         line: { color: "#b4c5ba", width: 1 }, visible: $("[data-naca-normals]", root).checked });
@@ -202,6 +208,9 @@
         { ...xy(select(reference.normalized_suction)), mode: "lines+markers", name: "NACA SS", marker: { size: 3 }, line: { color: colors.blue } },
         { ...xy(select(reference.normalized_pressure)), mode: "lines+markers", name: "NACA PS", marker: { size: 3 }, line: { color: colors.orange } }
       ];
+      if (!isLeading && reference.metadata.trailing_edge_arc) {
+        traces.push({ ...xy(reference.metadata.trailing_edge_arc), mode: "lines", name: "圆尾缘", line: { color: colors.red, width: 2 } });
+      }
       if (fitted) {
         const view = fitted.metadata?.edge_views?.[edge];
         const fittedSuction = view?.suction || select(fitted.suction);
@@ -213,16 +222,20 @@
         const circle = fitted[`${edge}_osculating_circle`];
         if (circle?.length) {
           traces.push({ ...xy(circle), mode: "lines", name: "极限密切圆", line: { color: colors.red, dash: "dot" } });
-          traces.push({ ...xy([fitted.metadata.leading_edge_center]), mode: "markers", name: "圆心", marker: { color: colors.red, symbol: "cross", size: 7 } });
+          traces.push({ ...xy([fitted.metadata[`${edge}_edge_center`]]), mode: "markers", name: "圆心", marker: { color: colors.red, symbol: "cross", size: 7 } });
         }
-        traces.push({ ...xy([isLeading ? fitted.camber[0] : fitted.camber.at(-1)]), mode: "markers", name: isLeading ? "鼻点" : "尖尾缘", marker: { color: colors.ink, size: 6 } });
+        traces.push({ ...xy([isLeading ? fitted.camber[0] : fitted.camber.at(-1)]), mode: "markers", name: isLeading ? "鼻点" : "尾缘端点", marker: { color: colors.ink, size: 6 } });
       }
-      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: { text: "x/c" }, zeroline: false }, yaxis: { title: { text: "y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false }, showlegend: false });
+      const radius = reference.metadata.trailing_edge_radius_ratio;
+      const center = reference.metadata.trailing_edge_center;
+      const closeup = !isLeading && radius && center;
+      charts.render(`naca-${isLeading ? "le" : "te"}-chart`, traces, { margin: { l: 48, r: 12, t: 25, b: 38 }, xaxis: { title: { text: "x/c" }, zeroline: false, ...(closeup ? { range: [center[0] - 5*radius, center[0] + 2*radius] } : {}) }, yaxis: { title: { text: "y/c" }, scaleanchor: "x", scaleratio: 1, zeroline: false, ...(closeup ? { range: [center[1] - 4*radius, center[1] + 4*radius] } : {}) }, showlegend: false });
     };
     render("leading", true);
     render("trailing", false);
     $("[data-naca-le]", root).textContent = fitted ? `r/c = ${fitted.edge_metrics.leading_edge_radius_ratio.toExponential(4)}` : "—";
-    $("[data-naca-te]", root).textContent = fitted ? `尖尾缘 · 楔角 ${fitted.edge_metrics.trailing_wedge_angle_deg.toFixed(3)}°` : "—";
+    const radius = fitted?.edge_metrics.trailing_edge_radius_ratio || reference.metadata.trailing_edge_radius_ratio;
+    $("[data-naca-te]", root).textContent = radius ? `圆尾缘 · r/c=${radius.toExponential(2)}` : (fitted ? `尖尾缘 · 楔角 ${fitted.edge_metrics.trailing_wedge_angle_deg.toFixed(3)}°` : "尖尾缘");
   }
 
   async function loadCases() {
@@ -240,19 +253,30 @@
 
   function renderSummary(data) {
     const distribution = data.status_distribution || {};
-    $("[data-summary='total']", root).textContent = `${Math.min(data.total, 36)}/36`;
+    $("[data-summary='total']", root).textContent = `${Math.min(data.total, 36)}/9`;
     $("[data-summary='valid']", root).textContent = distribution.valid || 0;
     $("[data-summary='warning']", root).textContent = distribution.warning || 0;
     $("[data-summary='rejected']", root).textContent = (distribution.rejected || 0) + (distribution.failed || 0);
-    $("[data-naca-progress]", root).style.width = `${Math.min(100, data.total / 36 * 100)}%`;
+    $("[data-naca-progress]", root).style.width = `${Math.min(100, data.total / 9 * 100)}%`;
     const state = $("[data-naca-job-state]", root);
     if (!state.classList.contains("running")) {
       state.textContent = data.total >= 36 ? "36 型已保存" : data.total ? "部分结果已保存" : "未运行";
     }
   }
 
+  function updateCaseDatLinks() {
+    const source = $("[data-naca-case-dat-source]", root).value;
+    const layout = $("[data-naca-case-dat-layout]", root).value;
+    $$('[data-naca-case-dat]', root).forEach(link => {
+      link.href = `/api/v2/naca65/cases/${encodeURIComponent(link.dataset.nacaCaseDat)}/export?format=dat&source=${source}&layout=${layout}`;
+      link.textContent = `${source === "fitted" ? "拟合" : "原生"}·${layout === "split" ? "ZIP" : "DAT"}`;
+      link.title = layout === "split" ? "两份独立 DAT：Suction TE→LE，Pressure LE→TE" : "单条闭合轮廓";
+    });
+  }
+
   function renderCaseTable(items) {
-    $("[data-naca-cases]", root).innerHTML = items.map(row => `<tr data-fit-id="${escapeHTML(row.fit_id)}"><td><button class="table-link" type="button">${escapeHTML(row.designation)}</button></td><td>${row.family}</td><td>${Number(row.thickness_ratio).toFixed(3)}</td><td>${Number(row.design_lift_coefficient).toFixed(1)}</td><td>${Number(row.loading_parameter_a).toFixed(1)}</td><td>${statusPill(row.fit_status)}</td><td>${scientific(row.rms_distance_ratio)}</td><td>${scientific(row.max_distance_ratio)}</td><td class="export-links"><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=csv">CSV</a><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=json">JSON</a><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=parquet">Parquet</a></td></tr>`).join("") || '<tr><td colspan="9" class="empty-state">尚无基准结果</td></tr>';
+    $("[data-naca-cases]", root).innerHTML = items.map(row => `<tr data-fit-id="${escapeHTML(row.fit_id)}"><td><button class="table-link" type="button">${escapeHTML(row.designation)}</button></td><td>${row.family}</td><td>${Number(row.thickness_ratio).toFixed(3)}</td><td>${Number(row.design_lift_coefficient).toFixed(1)}</td><td>${Number(row.loading_parameter_a).toFixed(1)}</td><td>${statusPill(row.fit_status)}</td><td>${scientific(row.rms_distance_ratio)}</td><td>${scientific(row.max_distance_ratio)}</td><td class="export-links"><a data-naca-case-dat="${escapeHTML(row.fit_id)}" href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=dat&layout=split">原生·ZIP</a><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=csv">CSV</a><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=json">JSON</a><a href="/api/v2/naca65/cases/${encodeURIComponent(row.fit_id)}/export?format=parquet">Parquet</a></td></tr>`).join("") || '<tr><td colspan="9" class="empty-state">尚无基准结果</td></tr>';
+    updateCaseDatLinks();
     $$('[data-fit-id]', root).forEach(row => $("button", row).addEventListener("click", async () => {
       try {
         const detail = await fetchJSON(`/api/v2/naca65/cases/${encodeURIComponent(row.dataset.fitId)}`);
@@ -278,7 +302,7 @@
     $$('[data-naca-run-benchmark]').forEach(button => button.disabled = true);
     const state = $("[data-naca-job-state]", root);
     try {
-      const queued = await fetchJSON("/api/v2/naca65/benchmarks", { method: "POST", body: "{}" });
+      const queued = await fetchJSON("/api/v2/naca65/benchmarks", { method: "POST", body: JSON.stringify({ compressor: true }) });
       state.textContent = "运行中";
       state.className = "pill running";
       for (;;) {
@@ -302,6 +326,30 @@
     }
   }
 
+  $("[data-naca-export-dat]", root).addEventListener("click", async () => {
+    if (!currentPayload) return;
+    const button = $("[data-naca-export-dat]", root);
+    button.disabled = true;
+    try {
+      const source = $("[data-naca-dat-source]", root).value;
+      const layout = $("[data-naca-dat-layout]", root).value;
+      const response = await fetch("/api/v2/naca65/export/dat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: currentPayload.reference, fitted_geometry: currentPayload.fitted_geometry, source, layout })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url; link.download = `${currentPayload.reference.native_id}-${source}.${layout === "split" ? "zip" : "dat"}`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { notice(error.message, true); }
+    finally { button.disabled = false; }
+  });
+  $$('[data-naca-case-dat-source], [data-naca-case-dat-layout]', root).forEach(select => select.addEventListener("change", updateCaseDatLinks));
   $$('[data-naca-mode]', root).forEach(button => button.addEventListener("click", () => setMode(button.dataset.nacaMode)));
   form.elements.family.addEventListener("change", updateFamily);
   form.addEventListener("submit", event => { event.preventDefault(); generateAndFit(); });

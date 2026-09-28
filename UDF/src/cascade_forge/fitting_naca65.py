@@ -37,6 +37,15 @@ def fit_reference_geometry(
         "NASA 前缘构造斜率有截断；a=1 尾缘解析导数奇异。"
         "拟合采用原始站位的一侧有限切向，端区误差如实保留。",
     ]
+    if reference.spec.family.value == "65-compressor":
+        warnings = [
+            "压气机厚度采用 NACA TR 1368 表 I 的 blower 列，"
+            "中弧线采用 a=1 表站位及有限端点切线插值。",
+            "名义 t/c=0.10 的表格最大厚度约为 0.10114c，不强行缩放回 0.10c。",
+            "x/c=0.95 后局部 Hermite 光顺连接精确圆尾缘，接点为 G1；"
+            "不声称 G2 或原始试验模型精确复刻。",
+            "法向分解指标针对圆整前的共享厚度模型；轮廓距离与自交检查包含圆整后的完整轮廓。",
+        ]
     if reference.spec.family.value == "65A":
         warnings.append(
             "65A 拟合目标使用直线尾段替换后的配对叶面中点与半间距，"
@@ -94,6 +103,21 @@ def evaluate_reference_fit(
     )
     dense_u = 0.5 * (1 - np.cos(np.linspace(0, np.pi, 4001)))
     dense_fit = evaluate_normal_offset(fitted.spec, dense_u)[:2]
+    if reference.spec.family.value == "65-compressor":
+        from .compressor_naca65 import round_trailing_edge
+
+        dense_source = round_trailing_edge(
+            reference.raw_suction,
+            reference.raw_pressure,
+            reference.construction_camber,
+            reference.construction_parameter,
+            reference.metadata["trailing_edge_radius_ratio"],
+            4001,
+        )[:2]
+        ss, ps, c, _, _ = evaluate_normal_offset(fitted.spec, dense_u)
+        dense_fit = round_trailing_edge(
+            ss, ps, c, dense_u, fitted.spec.trailing_edge_radius_ratio, 4001
+        )[:2]
     distances, core_distances, signed_errors = [], [], []
     sample = 0.5 * (1 - np.cos(np.linspace(0, np.pi, len(source[0]))))
     for side, (src, dst, dense_src, dense_dst) in enumerate(
@@ -204,7 +228,7 @@ def _feature_deltas(reference: NACA65Geometry, fitted: NACA65FitGeometry) -> dic
         dst[name] = math.degrees(math.atan2(*fitted_tangent[i, ::-1]))
     ss, ps = np.asarray(reference.raw_suction), np.asarray(reference.raw_pressure)
     src["leading_edge_radius_ratio"] = _edge_radius(ss[1], ss[0], ps[1])
-    src["trailing_edge_radius_ratio"] = 0.0
+    src["trailing_edge_radius_ratio"] = reference.metadata.get("trailing_edge_radius_ratio", 0.0)
     dst.update(
         {
             name: fitted.edge_metrics[name]

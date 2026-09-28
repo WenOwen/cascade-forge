@@ -17,12 +17,15 @@ from .models_v2 import BSplineCurveSpec
 
 
 def fit_decomposition(reference: NACA65Geometry, max_iterations: int = 80):
+    compressor = reference.spec.family.value == "65-compressor"
     u = np.asarray(reference.construction_parameter)
     c = np.asarray(reference.construction_camber).copy()
     c[[0, -1]] = [[0.0, 0.0], [1.0, 0.0]]
     n = np.asarray(reference.construction_normals)
     half = np.asarray(reference.construction_half_thickness).copy()
     source_decomposition = "sixseries-mean-line-normal-stations"
+    if compressor:
+        source_decomposition = "TR1368-blower-table-and-a1-mean-line-before-engineering-rounding"
     if reference.spec.family.value == "65A":
         # Sixseries replaces the two surfaces independently by straight lines
         # aft of x~=0.82.  The pre-replacement analytical mean line/thickness
@@ -35,7 +38,9 @@ def fit_decomposition(reference: NACA65Geometry, max_iterations: int = 80):
         u = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(c, axis=0), axis=1))]
         u /= u[-1]
         source_decomposition = "paired-native-surfaces-after-65A-tail-rule"
-    half[[0, -1]] = 0.0
+    half[0] = 0.0
+    if not compressor:
+        half[-1] = 0.0
     length = np.linalg.norm(np.diff(c, axis=0), axis=1).sum()
     derivatives = length * np.column_stack([n[:, 1], -n[:, 0]])
     # The analytical a=1 mean line has a logarithmic endpoint derivative.
@@ -95,12 +100,17 @@ def fit_decomposition(reference: NACA65Geometry, max_iterations: int = 80):
     camber = NACA65CamberCurveSpec(control_points=controls.tolist(), knots=knots.tolist())
 
     interior = (u > 0) & (u < 1)
-    q = half[interior] / (np.sqrt(u[interior]) * (1 - u[interior]))
+    factor = np.sqrt(u[interior])
+    if not compressor:
+        factor *= 1 - u[interior]
+    q = half[interior] / factor
     # LE square-root and sharp-TE linear factors enforce closure without a
     # nonphysical radius-as-thickness endpoint or a second surface spline.
     shape_target = PchipInterpolator(u[interior], q, extrapolate=True)(sample)
     shape_target[0] = q[0]
-    shape_target[-1] = max(1e-8, -float(PchipInterpolator(u, half).derivative()(1.0)))
+    shape_target[-1] = (
+        half[-1] if compressor else max(1e-8, -float(PchipInterpolator(u, half).derivative()(1.0)))
+    )
     thickness_fairness = 1e-8
     thickness_knots = np.r_[np.zeros(4), x_breaks, np.ones(4)]
     thickness_basis = BSpline(thickness_knots, np.eye(len(thickness_knots) - 4), 3)
@@ -116,6 +126,14 @@ def fit_decomposition(reference: NACA65Geometry, max_iterations: int = 80):
         max_iter=max_iterations,
     )
     spec = NACA65SplineSpec(
+        generator_version="naca65-compressor-bspline-v1"
+        if compressor
+        else "naca65-normal-bspline-v3",
+        thickness_law="sqrt(s)*B(s)" if compressor else "sqrt(s)*(1-s)*B(s)",
+        trailing_edge="rounded" if compressor else "sharp",
+        trailing_edge_radius_ratio=reference.metadata["trailing_edge_radius_ratio"]
+        if compressor
+        else 0,
         camber_curve=camber,
         thickness_shape_curve=BSplineCurveSpec(
             control_points=shape_fit.x[:, None].tolist(), knots=thickness_knots.tolist()
@@ -135,7 +153,9 @@ def evaluate_normal_offset(spec: NACA65SplineSpec, parameter: np.ndarray):
     camber = ce.evaluate(u)
     _, normals = unit_tangent_and_normal(ce, u)
     shape = CurveEvaluator(spec.thickness_shape_curve).evaluate(u)[:, 0]
-    half = np.sqrt(u) * (1 - u) * shape
+    half = np.sqrt(u) * shape
+    if spec.trailing_edge == "sharp":
+        half *= 1 - u
     suction = camber + half[:, None] * normals
     pressure = camber - half[:, None] * normals
     return suction, pressure, camber, 2 * half, normals
@@ -170,6 +190,8 @@ def normal_offset_curvatures(spec: NACA65SplineSpec, parameter: np.ndarray):
     g = root * (1 - u)
     dg = (1 - 3 * u) / (2 * root)
     ddg = -(1 + 3 * u) / (4 * u * root)
+    if spec.trailing_edge == "rounded":
+        g, dg, ddg = root, 1 / (2 * root), -1 / (4 * u * root)
     h, dh, ddh = g * b, dg * b + g * db, ddg * b + 2 * dg * db + g * ddb
     offset_first = dh[:, None] * normal + h[:, None] * normal_first
     offset_second = (
@@ -234,6 +256,17 @@ def generate_normal_offset_profile(
             "suction_curvature": curvature_ss.tolist(),
             "pressure_curvature": curvature_ps.tolist(),
         }
+    tail_metadata = {}
+    body_suction, body_pressure = suction.copy(), pressure.copy()
+    if spec.trailing_edge == "rounded":
+        from .compressor_naca65 import round_trailing_edge
+
+        dense_u = 0.5 * (1 - np.cos(np.linspace(0, np.pi, 2001)))
+        dense_ss, dense_ps, dense_c, _, _ = evaluate_normal_offset(spec, dense_u)
+        suction, pressure, tail_metadata = round_trailing_edge(
+            dense_ss, dense_ps, dense_c, dense_u, spec.trailing_edge_radius_ratio, count
+        )
+        edge_views.update(tail_metadata.pop("edge_views"))
     return NACA65FitGeometry(
         geometry_id=spec.geometry_id,
         source_id=source_id,
@@ -245,10 +278,14 @@ def generate_normal_offset_profile(
         normals=normals.tolist(),
         parameter=u.tolist(),
         leading_osculating_circle=circle.tolist(),
+        trailing_osculating_circle=tail_metadata.get("trailing_osculating_circle", []),
         edge_metrics={
             "leading_edge_radius_ratio": float(radius),
-            "trailing_edge_radius_ratio": 0.0,
-            "trailing_wedge_angle_deg": float(np.degrees(2 * np.arctan2(tail_shape, tail_speed))),
+            "trailing_edge_radius_ratio": spec.trailing_edge_radius_ratio,
+            "trailing_edge_tangency_error": tail_metadata.get("trailing_edge_tangency_error", 0.0),
+            "trailing_wedge_angle_deg": 0.0
+            if spec.trailing_edge == "rounded"
+            else float(np.degrees(2 * np.arctan2(tail_shape, tail_speed))),
             "relative_curvature_knot_jump_max": _curvature_knot_jump(spec),
             "midpoint_error_max": float(midpoint_error.max()),
             "normal_offset_error_max": float(orthogonal_error.max()),
@@ -266,5 +303,19 @@ def generate_normal_offset_profile(
             "edge_views": edge_views,
             "edge_continuity": "G2 joined nose; C2 sides at simple knots; intentional sharp TE",
             "surface_authority": "C(s) +/- sqrt(s)*(1-s)*B(s)*n(s); no surface refit",
+            **(
+                {
+                    "surface_authority": (
+                        "C(s) +/- sqrt(s)*B(s)*n(s); local G1 TE blends + circular cap"
+                    ),
+                    "body_suction": body_suction.tolist(),
+                    "body_pressure": body_pressure.tolist(),
+                    "normal_invariants_scope": "underlying body before x/c=0.95; cap is separate",
+                    "trailing_edge_osculating_radius": spec.trailing_edge_radius_ratio,
+                    **tail_metadata,
+                }
+                if spec.trailing_edge == "rounded"
+                else {}
+            ),
         },
     )

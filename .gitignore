@@ -8,8 +8,11 @@ UDF/build/
 UDF/dist/
 UDF/artifacts/
 UDF/datasets/
+UDF/data/raw/NACA65/
 UDF/logs/
 UDF/output/
+UDF/tmp/
+UDF/.pytest-temproot/
 UDF/.playwright-cli/
 /.playwright-cli/
 /output/playwright/

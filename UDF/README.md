@@ -49,8 +49,9 @@ UDF/
 ## 5. 接口
 
 Python 公共入口：`generate_profile`、`validate_profile`、`extract_features`、`ingest_legacy_anchors`、`generate_dataset`、`build_blade`、`export_geomturbo`。
+圆弧族另有独立入口（见第 17 节）：`build_arc_chain`、`build_mca_mean_line`、`generate_arc_profile`、`build_thickness_law`、`junction_station_range`、`maximum_feasible_half_wedge_deg`。
 
-CLI：`cascade-forge ingest-anchors|generate|audit|export|build-blade|serve`。
+CLI：`cascade-forge ingest-anchors|generate|audit|export|build-blade|serve|naca65|arc`。
 
 本地 API 使用 `/api/v1`；Web 服务只绑定本机地址，不包含认证或外网部署能力。
 
@@ -310,3 +311,115 @@ Web 的 LE/TE 局部图使用后端生成的 501 点加密端区曲线，避免 
 原生移植另与固定 commit 附带的 `sixseries.dll` 对 36 型、全部 176 个原始站位逐坐标比较，最大绝对差 `1.9989e-6 c`；v1、v2、v3 三套 manifest 所列 108 个 Parquet 哈希全部复核一致。全套 90 项 pytest 与 Ruff 通过，真实 Chromium 对 65/65A 端区及 320、375、768、1024、1440 px 画布通过，无控制台错误。
 
 来源：[OpenVSP 固定版本 sixseries 源码](https://github.com/OpenVSP/OpenVSP/blob/51bdec01d9a50fa4bdbc960b0def21dcd6330f72/src/external/sixseries/NACA_6_series.f)、[NASA NACA 65 系尾缘半径试验记录](https://ntrs.nasa.gov/citations/19930086925)。
+
+
+## 16. NACA 65 压气机圆尾缘：2026-09-07
+
+现已新增独立 `65-compressor` 模式，并设为 Web/CLI 单型默认。使用 TR 1368 blower 厚度表、a=1 中弧线和工程圆尾缘；名义 10% 型的尾缘半径为 0.0015c。第 13–15 节为历史 sixseries 实现记录，其中页面默认与编号映射的描述由本节替代。原基础翼型仍可显式选择。
+
+完整来源、G1 圆整约定、参数、导出、兼容性及验证见 [NACA 65 压气机说明](docs/naca65-compressor.md)。新 9 型库独立保存，全部 valid；全项目测试 103 项通过。
+
+## 17. 圆弧族叶型：单圆弧 CA、双圆弧 DCA 与多圆弧 MCA（2026-09-08，2026-09-23 修订）
+新增独立圆弧族内核（`src/cascade_forge/circular_arc.py`、`models_circular_arc.py`），
+完整数学合同见 [圆弧族叶型说明](docs/circular-arc-profiles.md)。本节只记录结论与验收。
+
+### 定义
+
+中弧线是 **N 段内切圆弧链**：节点切线角 `φ₀ = +χ₁ > … > φ_N = −χ₂`（以弦线为基准，
+`χ` 为进出口金属角），相邻圆弧共享切线。每段的**弦向跨度占比** `δ_i` 只受两条
+**线性**条件约束：`Σδ_i = 1` 与 `Σδ_i·tan μ_i = 0`（`μ_i` 为该段平均切线角）。
+因此**中弧线本身**闭式可解，没有迭代也没有最小二乘；半径由
+`r_i = δ_i / (2 sin(Δ_i/2) cos μ_i)` 反解。厚度律的尾段形状由一个单调性求解器确定，
+那是整条管线里唯一需要数值搜索的部分。
+
+自由度是 `2N − 1`。单圆弧的闭合条件退化为 `χ₁ = χ₂`（几何必然，不是约定）；
+`N = 2` 且 `χ₁ = χ₂` 时两段圆弧圆心重合，**严格退化为单圆弧**。
+
+双圆弧切点有三种闭合方式：最大弯度处相切（默认）、指定切点弦向站位、显式节点角。
+切点角可行域是 `(−χ₂, χ₁)`；可达站位是该区间像的**真子集**（`χ₁ = 30°`、`χ₂ = 20°`
+时为 `(0, 0.806209)`），由 `junction_station_range` 如实给出。
+
+**多圆弧的内节点站位是派生量。** 给定全部节点切线角后，两条线性闭合条件只留下 `N−2`
+维仿射可行域；省略站位时 `ArcMeanLineSpec` 在 pydantic 验证**之前**自动解出一组严格为
+正的跨度，因此 API、CLI 与 Web 三条路径行为一致（旧版只有 CLI 有这层回退，网页端的
+多圆弧因此 100% 报「需要 N-2 个内节点弦向站位」）。每个站位的可达区间由
+`interior_station_bounds` 闭式给出：把末两段的解代入 `δ > 0` 后可行域等价于三条关于
+`x` 的**线性**不等式，逐坐标取交即得区间，不需要线性规划或扫描。
+
+### 尾缘楔角约定与本轮的关键修正
+
+尾缘半楔角按**弦线局部坐标**中两侧叶面切线的夹角之半定义。叶面切向量含弧长因子 `L`
+与曲率项 `hκ`，所以 `β` 与厚度律末端斜率之间**不是**简单的正切比例，由
+`aft_end_slope_for_wedge` 精确反解。只有**直线中弧线**（`L = 1`、`χ₂ = 0`、`κ = 0`）才
+退化为 `h'(1) = −tan β`——这正是 `geometry-v1` 的 `slope_te = -tan(radians(...))` 约定，
+本内核在该退化条件下与它逐位一致（测试用 v1 实现直接对照固化）。默认 DCA30/20 请求
+`6°` 时实际是 `h'(1) = −0.108379`，而不是退化值 `−0.105104`（相差 3.1%）。
+
+修正了一处早期实现的真实缺陷：把 `t_TE/c` 与楔角都当作独立输入时，给定 `t/c = 0.10`、
+`t_TE/c = 0.006`，一条形状保持五次多项式会把请求的半厚度 `0.025` 过冲到 `1.70`。
+根因是几何性的——尾段要在长度 `ℓ = 1 − s_t` 上从 `h_max` 单调降到 `h_TE` 且末端斜率幅值
+为 `m`，必须满足 `m·ℓ ≲ 3 (h_max − h_TE)`；超过它时任何二阶连续的单调曲线都会先回升。
+现在尾段入口二阶导数由**单调性求解器**确定：不可行时抛 `ThicknessLawInfeasible`
+并给出可达上界，不静默钳制。
+
+**本轮修复的可行性判据缺陷。** 旧实现的可行性判据（601 点粗扫 + 2001 点采样 + 值差分
+容差）与 `_verify_law` 门禁相差约三个数量级，于是「搜索说可行、门禁说不可行」：报出的
+上界之下 `0.01°` 就被拒绝。现在判据只有一个来源——解析极值（尾段取四次导数的精确最大
+值、前段取 `N(q)/(2q)` 的精确最小值）+ 共用容差 `1e-9·h_max`；搜索目标改为**合并违反
+量** `max(尾段违反量, 前段违反量)`，它仍是凸函数，因此三分搜索定位最小值、二分收上端点
+都成立。实测报出上界与生成器真实接受边界相差 `< 10⁻⁶°`，且 `β ≤ 报出上界` 严格蕴含
+生成成功。
+
+**可行域报告的两个维度必须分开。** `arc_feasibility_report` 报的是：
+
+* `maximum_feasible_half_wedge_deg`——有效楔角上界，与参数域**两端**取交：数学上界
+  高于 `45°` 时截到其下最近的可表示值（实测 `t/c = 0.25`、`s_t = 0.75` 时为 `53.915°`），
+  低于 `0.5°` 时返回 `null` 并令 `wedge_bound_exists = false`（实测有合同的上界恰好
+  `0.0`）。旧实现只做上端截断，于是会把 `0.0` 这种必然 422 的数当成「可行上界」报出去。
+* `geometry_feasible` / `geometry_error`——这条 spec **是否真的能生成**。法向偏置自交
+  （厚度超过中弧线曲率半径）与楔角无关，实测有合同在任何允许的楔角下都失败；只报楔角
+  上界会让用户把「楔角可行」误读成「能生成」。
+
+### 接口与验收
+
+Python 公共入口新增 `build_arc_chain`、`build_mca_mean_line`、`generate_arc_profile`、
+`build_thickness_law`、`double_arc_first_span`、`interior_station_bounds`、
+`junction_station_bounds_deg`、`junction_station_range`、`arc_feasibility_report`、
+`maximum_feasible_half_wedge_deg`、`trailing_edge_half_wedges_deg`、
+`ThicknessLawInfeasible`。CLI 新增 `arc generate` 与 `arc limits`（支持
+`--family multiple` 查询站位可达区间）。Web 侧栏新增「圆弧族实验室」（`/arc`）：
+参数变化时实时查询可行域、把楔角与切点站位的滑动条上限收敛到真实可达区间、显示各段
+圆弧与半径、节点表与全部解析不变量。API 为 `/api/v2/arc/generate` 与
+`/api/v2/arc/limits`。
+
+解析不变量实测（默认双圆弧 `χ₁ = 30°`、`χ₂ = 20°`、`t/c = 0.10`、
+`t_TE/c = 0.006`、`β = 6°`）：
+
+| 不变量 | 门槛 | 实测 |
+|---|---|---|
+| 弦线闭合误差 | `< 10⁻¹²` | `0.0`（双圆弧）／`1.4×10⁻¹⁷`（MCA4） |
+| 节点重建误差 | `< 10⁻¹²` | `2.2×10⁻¹⁶` |
+| 节点相切误差 | `< 10⁻¹⁴` | `0.0` |
+| 前缘半径极限值 | 相对误差 `< 2×10⁻⁵` | `4.9×10⁻⁷` |
+| 轮廓自交 | 必须为 0 | `0`（装配门禁未抛错；独立折线检测在测试里另做） |
+| 默认合同可行楔角上界 | `> 14°` | `14.380177°` |
+| 报出上界 vs 生成器真实接受边界 | 一致 | 差 `< 10⁻⁶°`（恰好一个 `1e-9` 安全内缩） |
+| 报出上界落在参数域内（含 `null` 语义） | 必须成立 | 460 组合同 0 不一致 |
+| 内节点站位区间 vs 真实可行性 | 完全一致 | 区间内外探针 0 不一致 |
+| 搜索返回的 `Y` 通过全部门禁 | 必须成立 | 137,200 组网格 / 20,000 组随机，0 反例 |
+
+测试：`tests/test_circular_arc.py` 86 项解析不变量测试、`tests/test_arc_integration.py`
+18 项 CLI/Web 集成测试；全项目 213 项 `pytest` 通过，`ruff check src tests` 通过。
+
+### 已知限制
+
+* 对称法向厚度律**无法**形成真实尖尾缘楔角（总落差只有 `h_max − h_TE`，而单调段
+  最小长度就是尾段长度）。需要尖尾缘时应改用圆弧帽（参考
+  `compressor_naca65.round_trailing_edge` 的 G1 半圆拼接）或非对称厚度模型。
+* `interior_station_bounds` 是逐坐标敏感性，不是联合可行域的投影：盒内可以有不满足
+  联合约束的点。
+* 相邻节点角间距极小时半径按 `1/Δφ` 发散，链本身病态。求值已改为无灾难性抵消的弦向量
+  形式（`10⁻¹³°` 间距下与 60 位 `Decimal` 参考的偏差仍是 `2.2×10⁻¹⁶`），但这类输入不应
+  出现在真实设计里。
+* 曲率在圆弧节点处跳变，这是分片圆弧的固有性质；数值微分校验须避开节点邻域。
+* 本内核只保证几何精确与可追溯，不代表叶型具备良好气动性能。

@@ -8,7 +8,7 @@ import pytest
 from cascade_forge.benchmark_naca65 import benchmark_specs
 from cascade_forge.curves import CurveEvaluator, unit_tangent_and_normal
 from cascade_forge.fitting_naca65 import point_to_polyline
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig, NACA65SplineSpec
+from cascade_forge.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
 from cascade_forge.naca65 import generate_naca65
 from cascade_forge.normal_bspline import (
     evaluate_normal_offset,
@@ -79,7 +79,7 @@ def test_curve_distance_has_no_sample_grid_floor():
 
 
 def test_sixseries_trailing_gap_is_not_misreported_as_a_rounding_radius():
-    reference = generate_naca65("65-810")
+    reference = generate_naca65(NACA65Spec(loading_parameter_a=1.0))
     assert reference.metadata["raw_trailing_edge_gap_ratio"] > 0
     spec, _ = fit_decomposition(reference)
     profile = generate_normal_offset_profile(spec, reference.native_id)

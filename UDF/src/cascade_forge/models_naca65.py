@@ -16,6 +16,7 @@ NACA65_BENCHMARK_VERSION = "naca65-benchmark-3.0.0"
 
 
 class NACA65Family(StrEnum):
+    COMPRESSOR_65 = "65-compressor"
     SERIES_65 = "65"
     SERIES_65A = "65A"
 
@@ -30,7 +31,9 @@ class NACA65Spec(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
-    algorithm_version: Literal["nasa-sixseries-1974-python-v1"] = NACA65_ALGORITHM_VERSION
+    algorithm_version: Literal["nasa-sixseries-1974-python-v1", "naca65-compressor-table-v1"] = (
+        NACA65_ALGORITHM_VERSION
+    )
     family: NACA65Family = NACA65Family.SERIES_65
     thickness_ratio: float = Field(default=0.10, ge=0.03, le=0.18)
     design_lift_coefficient: float = Field(default=0.8, ge=0.0, le=2.0)
@@ -40,8 +43,24 @@ class NACA65Spec(BaseModel):
     points_per_side: Literal[201] = 201
     decomposition_version: Literal["sixseries-stations-v2"] = "sixseries-stations-v2"
 
+    @model_validator(mode="before")
+    @classmethod
+    def compressor_defaults(cls, values):
+        if isinstance(values, dict) and values.get("family") == "65-compressor":
+            values = dict(values)
+            values.setdefault("loading_parameter_a", 1.0)
+            values["algorithm_version"] = "naca65-compressor-table-v1"
+        return values
+
     @model_validator(mode="after")
     def check_family_contract(self) -> NACA65Spec:
+        if self.family == NACA65Family.COMPRESSOR_65 and self.loading_parameter_a != 1.0:
+            raise ValueError("NACA 65 压气机系列的中弧线固定为 a=1.0")
+        if (
+            self.family != NACA65Family.COMPRESSOR_65
+            and self.algorithm_version != NACA65_ALGORITHM_VERSION
+        ):
+            raise ValueError("压气机算法版本只能用于 65-compressor")
         if self.family == NACA65Family.SERIES_65A:
             if abs(self.loading_parameter_a - 0.8) > 1e-12:
                 raise ValueError("NACA 65A 的载荷参数 a 固定为 0.8")
@@ -53,6 +72,9 @@ class NACA65Spec(BaseModel):
     def canonical_designation(self) -> str:
         cli_tenths = int(round(self.design_lift_coefficient * 10.0))
         thickness_percent = int(round(self.thickness_ratio * 100.0))
+        if self.family == NACA65Family.COMPRESSOR_65:
+            lift = str(cli_tenths) if cli_tenths <= 9 else f"({cli_tenths})"
+            return f"NACA 65-{lift}{thickness_percent:02d} compressor · rounded TE"
         if self.family == NACA65Family.SERIES_65A:
             return f"NACA 65A-{cli_tenths}{thickness_percent:02d} a=0.8 mod"
         if cli_tenths <= 9:
@@ -135,16 +157,32 @@ class NACA65CamberCurveSpec(BaseModel):
 class NACA65SplineSpec(BaseModel):
     """Authoritative normal-offset model, not a v2.1 surface approximation."""
 
-    generator_version: Literal["naca65-normal-bspline-v3"] = "naca65-normal-bspline-v3"
+    generator_version: Literal["naca65-normal-bspline-v3", "naca65-compressor-bspline-v1"] = (
+        "naca65-normal-bspline-v3"
+    )
     camber_curve: NACA65CamberCurveSpec
     thickness_shape_curve: BSplineCurveSpec
     linked_thickness: Literal[True] = True
-    thickness_law: Literal["sqrt(s)*(1-s)*B(s)"] = "sqrt(s)*(1-s)*B(s)"
+    thickness_law: Literal["sqrt(s)*(1-s)*B(s)", "sqrt(s)*B(s)"] = "sqrt(s)*(1-s)*B(s)"
     parameter_convention: str = "normalized-source-mean-line-arclength"
-    trailing_edge: Literal["sharp"] = "sharp"
+    trailing_edge: Literal["sharp", "rounded"] = "sharp"
+    trailing_edge_radius_ratio: float = Field(default=0.0, ge=0.0, le=0.01)
     source_decomposition: str = "sixseries-mean-line-normal-stations"
     camber_fairness_weight: float = 2e-8
     thickness_fairness_weight: float = 1e-8
+
+    @model_validator(mode="after")
+    def check_tail_contract(self):
+        rounded = self.trailing_edge == "rounded"
+        if rounded != (self.generator_version == "naca65-compressor-bspline-v1"):
+            raise ValueError("圆尾缘需要独立压气机生成器版本")
+        if rounded != (self.thickness_law == "sqrt(s)*B(s)"):
+            raise ValueError("尾缘类型与厚度公式不一致")
+        if (rounded and self.trailing_edge_radius_ratio <= 0) or (
+            not rounded and self.trailing_edge_radius_ratio != 0
+        ):
+            raise ValueError("圆尾缘半径必须为正，尖尾缘半径必须为零")
+        return self
 
     @property
     def geometry_id(self) -> str:
@@ -155,6 +193,7 @@ class NACA65SplineSpec(BaseModel):
                     "source_decomposition",
                     "camber_fairness_weight",
                     "thickness_fairness_weight",
+                    *(set() if self.trailing_edge == "rounded" else {"trailing_edge_radius_ratio"}),
                 },
             ),
             sort_keys=True,
@@ -190,6 +229,7 @@ class NACA65BenchmarkConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     schema_version: Literal["1.0.0"] = NACA65_SCHEMA_VERSION
     benchmark_version: Literal["naca65-benchmark-3.0.0"] = NACA65_BENCHMARK_VERSION
+    compressor: bool = False
     thickness_ratios: tuple[float, ...] = (0.06, 0.10, 0.15)
     design_lift_coefficients: tuple[float, ...] = (0.0, 0.8, 1.2)
     series_65_loading_parameters: tuple[float, ...] = (0.6, 0.8, 1.0)
@@ -199,6 +239,8 @@ class NACA65BenchmarkConfig(BaseModel):
 
     @property
     def case_count(self) -> int:
+        if self.compressor:
+            return len(self.thickness_ratios) * len(self.design_lift_coefficients)
         return (
             len(self.thickness_ratios)
             * len(self.design_lift_coefficients)

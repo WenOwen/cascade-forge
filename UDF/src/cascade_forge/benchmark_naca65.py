@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .compressor_naca65 import PROVENANCE as COMPRESSOR_PROVENANCE
 from .fitting_naca65 import fit_reference_geometry
 from .models_naca65 import (
     NACA65BenchmarkConfig,
@@ -20,6 +21,12 @@ from .storage_naca65 import NACA65BenchmarkStore
 
 
 def benchmark_specs(config: NACA65BenchmarkConfig) -> list[NACA65Spec]:
+    if config.compressor:
+        return [
+            NACA65Spec(family="65-compressor", thickness_ratio=t, design_lift_coefficient=cl)
+            for t in config.thickness_ratios
+            for cl in config.design_lift_coefficients
+        ]
     specs = [
         NACA65Spec(
             family=NACA65Family.SERIES_65,
@@ -54,8 +61,7 @@ def run_naca65_benchmark(
     previous_manifest = store.latest_manifest()
     if previous_manifest is not None and previous_manifest.config != config:
         raise ValueError(
-            "目标基准库已由不同的 NACA 65 拟合配置初始化；"
-            "请使用相同配置恢复，或选择新的版本化目录"
+            "目标基准库已由不同的 NACA 65 拟合配置初始化；请使用相同配置恢复，或选择新的版本化目录"
         )
     specs = benchmark_specs(config)
     if len(specs) != config.case_count:
@@ -111,7 +117,10 @@ def run_naca65_benchmark(
     now = datetime.now(UTC).isoformat()
     config_payload = config.model_dump(mode="json")
     run_key = json.dumps(
-        {"config": config_payload, "source_commit": SOURCE_PROVENANCE["commit"]},
+        {
+            "config": config_payload,
+            "source": COMPRESSOR_PROVENANCE if config.compressor else SOURCE_PROVENANCE,
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -124,7 +133,7 @@ def run_naca65_benchmark(
         total_cases=len(specs),
         completed_cases=len(existing.intersection({spec.native_id for spec in specs})),
         status_distribution=dict(distribution),
-        source_provenance=SOURCE_PROVENANCE,
+        source_provenance=COMPRESSOR_PROVENANCE if config.compressor else SOURCE_PROVENANCE,
         files=store.artifact_hashes(),
         created_at=previous_manifest.created_at if previous_manifest else now,
         completed_at=now,

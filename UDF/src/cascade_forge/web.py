@@ -4,7 +4,7 @@ import csv
 import io
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import plotly.graph_objects as go
@@ -20,6 +20,12 @@ from pydantic import BaseModel, Field
 from .audit_v2 import audit_dataset_v2
 from .benchmark_naca65 import run_naca65_benchmark
 from .blade3d import build_blade
+from .circular_arc import (
+    arc_feasibility_report,
+    default_double_arc_spec,
+    generate_arc_profile,
+)
+from .export_igg import naca65_igg_dat, naca65_igg_split_zip
 from .features import curve_curvature, extract_features
 from .fitting_naca65 import fit_reference_geometry
 from .fitting_v2 import fit_anchors_to_dataset
@@ -28,7 +34,8 @@ from .geometry_v2 import resolve_geometry_spec
 from .geomturbo import export_geomturbo
 from .jobs import JobManager
 from .models import CascadeContext, GeometrySpec, SectionSchedule
-from .models_naca65 import NACA65BenchmarkConfig, NACA65Spec
+from .models_circular_arc import ArcProfileSpec
+from .models_naca65 import NACA65BenchmarkConfig, NACA65FitGeometry, NACA65Geometry, NACA65Spec
 from .models_v2 import GeometrySpecV2
 from .naca65 import generate_naca65, parse_naca65_designation
 from .sampling import generate_dataset
@@ -85,6 +92,13 @@ class NACA65PresetRequest(BaseModel):
     designation: str = Field(min_length=5, max_length=40)
 
 
+class NACA65DatRequest(BaseModel):
+    reference: NACA65Geometry
+    fitted_geometry: NACA65FitGeometry | None = None
+    source: Literal["native", "fitted"] = "native"
+    layout: Literal["closed", "split"] = "closed"
+
+
 def create_app(
     dataset_root: str | Path,
     *,
@@ -122,7 +136,7 @@ def create_app(
     resolved_naca65_root = (
         Path(naca65_dataset_root).resolve()
         if naca65_dataset_root
-        else resolved_v2_root.parent / "naca65-benchmark-v3.0.0"
+        else resolved_v2_root.parent / "naca65-compressor-benchmark-v1.0.0"
     )
     naca65_store = NACA65BenchmarkStore(resolved_naca65_root)
     jobs = JobManager(store)
@@ -201,6 +215,14 @@ def create_app(
             "pages/blade.html",
             _page_context("blade", store_v2, workspace),
         )
+
+    @application.get("/arc", response_class=HTMLResponse)
+    def arc_page(request: Request) -> HTMLResponse:
+        context = _page_context("arc", store_v2, workspace)
+        # 模板用服务端渲染的默认值（与 ArcProfileSpec 的默认合同保持一致），
+        # 页面首屏先调用 /api/v2/arc/limits 把可行域填进控件再生成。
+        context["default_arc_spec"] = default_double_arc_spec().model_dump(mode="json")
+        return templates.TemplateResponse(request, "pages/arc.html", context)
 
     @application.get("/datasets", response_class=HTMLResponse)
     def datasets_page(request: Request) -> HTMLResponse:
@@ -283,6 +305,24 @@ def create_app(
             raise HTTPException(422, str(exc)) from exc
         return _geometry_payload(geometry)
 
+    @application.post("/api/v2/arc/generate")
+    def generate_arc_api(spec: ArcProfileSpec) -> dict[str, Any]:
+        try:
+            geometry = generate_arc_profile(spec)
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"geometry": geometry.model_dump(mode="json")}
+
+    @application.post("/api/v2/arc/limits")
+    def arc_limits_api(spec: ArcProfileSpec) -> dict[str, Any]:
+        # 可行域报告必须用**同一条** spec 求值：楔角上界依赖中弧线总弧长 L、出口金属角
+        # χ₂ 与尾缘曲率 κ，前缘半径标称量还会影响前段单调性判据。省略它们会报出一个
+        # 生成器实现不了的数（旧实现偏高约 3%，且上界之下 0.01° 就被拒绝）。
+        try:
+            return arc_feasibility_report(spec)
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @application.post("/api/v2/naca65/generate")
     def generate_naca65_api(spec: NACA65Spec) -> dict[str, Any]:
         try:
@@ -315,6 +355,25 @@ def create_app(
             "fit_report": report.model_dump(mode="json"),
             "fitted_geometry": fitted.model_dump(mode="json"),
         }
+
+    @application.post("/api/v2/naca65/export/dat")
+    def export_current_naca65_dat(body: NACA65DatRequest) -> Response:
+        try:
+            case = body.model_dump(mode="json")
+            content = (
+                naca65_igg_split_zip(case, body.source) if body.layout == "split"
+                else naca65_igg_dat(case, body.source)
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        extension = "zip" if body.layout == "split" else "dat"
+        return Response(
+            content,
+            media_type="application/zip" if body.layout == "split" else "application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="naca65-{body.source}.{extension}"'
+            },
+        )
 
     @application.post("/api/v2/naca65/benchmarks", status_code=202)
     def start_naca65_benchmark(
@@ -373,10 +432,29 @@ def create_app(
         return case
 
     @application.get("/api/v2/naca65/cases/{fit_id}/export")
-    def export_naca65_case(fit_id: str, format: str = "csv") -> Response:
+    def export_naca65_case(
+        fit_id: str, format: str = "csv", source: Literal["native", "fitted"] = "native",
+        layout: Literal["closed", "split"] = "closed",
+    ) -> Response:
         case = naca65_store.get_case(fit_id)
         if case is None:
             raise HTTPException(404, f"找不到 {fit_id}")
+        if format == "dat":
+            try:
+                content = (
+                    naca65_igg_split_zip(case, source) if layout == "split"
+                    else naca65_igg_dat(case, source)
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            extension = "zip" if layout == "split" else "dat"
+            return Response(
+                content,
+                media_type="application/zip" if layout == "split" else "application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{fit_id}-{source}.{extension}"'
+                },
+            )
         if format == "json":
             return JSONResponse(
                 case,
@@ -403,7 +481,7 @@ def create_app(
                     "Content-Disposition": f'attachment; filename="{fit_id}.parquet"'
                 },
             )
-        raise HTTPException(422, "format 仅支持 csv、json 或 parquet")
+        raise HTTPException(422, "format 仅支持 dat、csv、json 或 parquet")
 
     @application.post("/api/v2/curves/resolve")
     def resolve_curves_v2(spec: GeometrySpecV2) -> dict[str, Any]:

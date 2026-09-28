@@ -37,7 +37,7 @@ def parse_naca65_designation(designation: str) -> NACA65Spec:
     lift_digits = match.group(1) or match.group(2)
     thickness_percent = int(match.group(3))
     return NACA65Spec(
-        family=NACA65Family.SERIES_65,
+        family=NACA65Family.COMPRESSOR_65,
         thickness_ratio=thickness_percent / 100.0,
         design_lift_coefficient=int(lift_digits) / 10.0,
         loading_parameter_a=1.0,
@@ -51,6 +51,10 @@ def generate_naca65(spec: NACA65Spec | str) -> NACA65Geometry:
 
     if isinstance(spec, str):
         spec = parse_naca65_designation(spec)
+    if spec.family == NACA65Family.COMPRESSOR_65:
+        from .compressor_naca65 import generate_compressor
+
+        return generate_compressor(spec)
     raw_suction, raw_pressure, native_camber, native_half, native_normals = _sixseries_construction(
         spec
     )

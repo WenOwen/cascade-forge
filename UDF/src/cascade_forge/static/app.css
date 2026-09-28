@@ -229,6 +229,22 @@ pre { max-height: 420px; overflow: auto; padding: 14px; border-radius: 9px; back
 .naca-actions { margin-top: 16px; }
 .naca-provenance dd { min-width: 0; overflow-wrap: anywhere; }
 .naca-provenance code { font-size: 11px; }
+
+/* 圆弧族实验室：与 NACA 实验室共用同一套栅格与粘性检查器行为。 */
+.arc-workbench { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+.arc-inspector { position: sticky; top: 92px; max-height: calc(100vh - 112px); overflow: auto; }
+.arc-inspector small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.45; }
+.arc-results { min-width: 0; }
+.arc-results > * + * { margin-top: 18px; }
+.arc-invariants { font-variant-numeric: tabular-nums; font-size: 12px; }
+.arc-profile-frame { height: clamp(380px, 44vw, 590px); }
+[data-arc-root] .modebar-container { min-height: 30px; z-index: 2; pointer-events: none; }
+[data-arc-root] .modebar { pointer-events: auto; }
+.arc-actions { margin-top: 16px; }
+.arc-node-table { max-height: 320px; overflow: auto; }
+.arc-bounds { font-variant-numeric: tabular-nums; font-size: 12px; }
+.arc-bounds dd { min-width: 0; overflow-wrap: anywhere; }
+.arc-bounds dd.infeasible { color: var(--red, #d70015); font-weight: 650; }
 .naca-benchmark-card { margin-top: 18px; }
 .naca-benchmark-grid { display: grid; grid-template-columns: minmax(360px, .85fr) minmax(0, 1.15fr); gap: 18px; align-items: start; }
 .naca-heatmap-chart { height: 430px; }
@@ -264,8 +280,8 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
   body.sidebar-open .sidebar-scrim { display: block; }
   .workspace-shell { width: 100%; margin-left: 0; }
   .toolbar { padding-left: 62px; }
-  .studio-layout, .naca-workbench, .overview-grid, .two-column { grid-template-columns: 1fr; }
-  .inspector, .naca-inspector { position: static; max-height: none; }
+  .studio-layout, .naca-workbench, .arc-workbench, .overview-grid, .two-column { grid-template-columns: 1fr; }
+  .inspector, .naca-inspector, .arc-inspector { position: static; max-height: none; }
   .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .edge-grid { grid-template-columns: 1fr; }
 }

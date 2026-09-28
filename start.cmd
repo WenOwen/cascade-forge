@@ -29,7 +29,7 @@ echo.
     --dataset "datasets/geometry-v1.0.0" ^
     --v2-dataset "datasets/geometry-v2.1.0" ^
     --workspace "datasets/workspace-v2" ^
-    --naca65-dataset "datasets/naca65-benchmark-v3.0.0" ^
+    --naca65-dataset "datasets/naca65-compressor-benchmark-v1.0.0" ^
     --host "127.0.0.1" ^
     --port "%PORT%"
 
