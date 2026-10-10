@@ -26,6 +26,21 @@ def baseline_spec() -> GeometrySpec:
     )
 
 
+def test_v1_curvature_metrics_do_not_reject_geometry(baseline_spec, monkeypatch):
+    geometry = generate_profile(baseline_spec)
+    features = extract_features(geometry).model_copy(update={
+        "max_abs_curvature_gradient": 1e12,
+        "suction_max_abs_curvature": 1e9,
+        "pressure_max_abs_curvature": 1e9,
+    })
+    monkeypatch.setattr("cascade_forge.validation.extract_features", lambda _: features)
+    report = validate_profile(geometry)
+    assert report.valid
+    assert report.metrics["max_abs_curvature_gradient"] == 1e12
+    assert not any(issue.code in {"curvature_gradient", "curvature_spike"}
+                   for issue in report.issues)
+
+
 def test_geometry_is_deterministic_and_closed(baseline_spec: GeometrySpec) -> None:
     first = generate_profile(baseline_spec)
     second = generate_profile(baseline_spec)

@@ -8,10 +8,13 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/app.css?v=2.2-simple-workflow">
   <link rel="stylesheet" href="/static/guidance.css?v=2.2-simple-workflow">
+  <link rel="stylesheet" href="/static/profile-rail.css?v=5">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
-  <script src="/static/app.js?v=2.2-simple-workflow.2" defer></script>
+  <script src="/static/app.js?v=3.0-profile-workflow.9" defer></script>
   {% block extra_scripts %}{% endblock %}
+  <script src="/static/database-picker.js?v=2" defer></script>
+  <script src="/static/profile-rail.js?v=4" defer></script>
 </head>
 <body data-page="{{ page|default('overview') }}">
   <a class="skip-to-content" href="#main-content">跳转到主内容</a>
@@ -20,26 +23,15 @@
   <aside class="sidebar" aria-label="主导航">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">CF</span><span><strong>Cascade Forge</strong><small>Geometry Workbench</small></span></a>
     {% set daily_navigation = [
-      ('overview','/','总览','⌂'), ('studio','/studio','叶型工作室','◇'),
-      ('database','/database','数据库','▦'),
-      ('naca65','/naca65','NACA 65 实验室','◉'),
-      ('arc','/arc','圆弧族实验室','◠'),
-      ('compare','/compare','叶型比较','⇄'), ('cascade','/cascade','叶栅检查','≋'),
-      ('blade','/blade','三维叶片','△')
-    ] %}
-    {% set maintenance_navigation = [
-      ('anchors','/anchors','NASA 锚点','◎'), ('datasets','/datasets','数据集与批次','▤'),
-      ('audit','/audit','审计','✓'), ('jobs','/jobs','Jobs 与制品','◷')
+      ('studio','/studio','自定义叶型','◇'),
+      ('standard','/standard','标准叶型','◠'),
+      ('database','/database','数据库浏览','▦')
     ] %}
     <nav aria-label="日常设计">
       <p class="nav-group-label">日常设计</p>
       {% for key, href, label, icon in daily_navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"{% if page == key %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}
     </nav>
-    <details class="maintenance-nav"{% if page in ['anchors', 'datasets', 'audit', 'jobs'] %} open{% endif %}>
-      <summary>数据库维护</summary>
-      <p class="nav-group-help">批量建库、校验与后台任务</p>
-      <nav aria-label="数据库维护">{% for key, href, label, icon in maintenance_navigation %}<a href="{{ href }}" class="nav-item {% if page == key %}active{% endif %}"{% if page == key %} aria-current="page"{% endif %}><span class="nav-icon" aria-hidden="true">{{ icon }}</span><span>{{ label }}</span></a>{% endfor %}</nav>
-    </details>
+
     <div class="sidebar-footer"><span class="status-dot"></span><span>本地离线</span><small>schema 2.1.0</small></div>
   </aside>
   <main class="workspace-shell">
@@ -49,12 +41,12 @@
       'studio': {
         'purpose': '调整参数设计二维叶型，保存后可以继续编辑。',
         'steps': ['先调进出口角、安装角与厚度，观察右侧轮廓变化。', '需要精修时展开更多形状参数；检查图表后保存设计。', '下载参数文件可以备份，也可以从已保存设计继续编辑。'],
-        'links': [('/naca65', '用标准 NACA 65 叶型起步')]
+        'links': [('/standard', '生成 NACA65 或双圆弧叶型')]
       },
       'database': {
-        'purpose': '查找已入库的叶型，查看轮廓、比较候选或导出坐标。',
-        'steps': ['通过 ID、来源或状态筛选叶型；重置可恢复全部结果。', '点击详情查看轮廓，勾选 2–12 个叶型后比较所选。', '选择导出格式并下载；手工保存的设计在叶型工作室中打开。'],
-        'links': [('/studio?open=workspace', '查看手工保存的设计'), ('/datasets', '数据库为空时：初始化数据集')]
+        'purpose': '浏览自定义、NACA65 和双圆弧叶型，查看截面或导出数据。',
+        'steps': ['按系列或名称 / ID 筛选。', '打开截面后可下载 CSV、DAT 或配置三维尺寸导出 GeomTurbo。', '新生成的数据集可以整包下载，已有数据保持不变。'],
+        'links': [('/studio', '自定义叶型'), ('/standard', '标准叶型')]
       },
       'naca65': {
         'purpose': '生成标准 NACA 65 叶型，并下载可导入 IGG 的二维曲线。',

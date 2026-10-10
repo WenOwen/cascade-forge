@@ -1,0 +1,17 @@
+<aside class="surface-card profile-rail" data-profile-rail aria-label="保存导出与样本列表">
+  {% include "partials/database-picker.html" %}
+  <div class="rail-tabs" role="tablist" aria-label="右侧操作栏">
+    <button type="button" role="tab" id="rail-actions-tab" aria-controls="rail-actions" aria-selected="true" data-rail-tab="actions">保存与导出</button>
+    <button type="button" role="tab" id="rail-saved-tab" aria-controls="rail-saved" aria-selected="false" tabindex="-1" data-rail-tab="saved">已保存列表</button>
+  </div>
+  <section id="rail-actions" role="tabpanel" aria-labelledby="rail-actions-tab" data-rail-panel="actions">
+    {% include "partials/profile-output.html" %}
+  </section>
+  <section id="rail-saved" role="tabpanel" aria-labelledby="rail-saved-tab" data-rail-panel="saved" hidden>
+    {% if page == 'studio' %}<details class="rail-history-source" data-rail-history-source><summary>历史设计</summary><label>查看范围<select data-rail-source><option value="dataset">当前数据库截面</option><option value="workspace">历史设计快照</option></select></label><p class="field-help">快照保留设计参数和修订历史，与截面数据库分开保存。</p></details>{% endif %}
+    <div class="button-row"><button class="button" type="button" data-rail-refresh>刷新列表</button><a class="button" href="/database">浏览 / 比较</a></div>
+    <p class="field-help" data-rail-status role="status"></p>
+    <div class="rail-saved-list" data-rail-list></div>
+    <div class="pagination"><button class="button" type="button" data-rail-prev disabled>上一页</button><span data-rail-page>第 1 页</span><button class="button" type="button" data-rail-next disabled>下一页</button></div>
+  </section>
+</aside>

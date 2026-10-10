@@ -8,6 +8,7 @@ UDF/build/
 UDF/dist/
 UDF/artifacts/
 UDF/datasets/
+/databases/
 UDF/data/raw/NACA65/
 UDF/logs/
 UDF/output/

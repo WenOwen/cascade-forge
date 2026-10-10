@@ -1,0 +1,45 @@
+<section class="surface-card" data-profile-output>
+  <div class="button-row profile-primary-actions" data-profile-primary-actions>
+    <button class="button primary" type="button" data-profile-save disabled>保存叶型</button>
+    <button class="button" type="button" data-profile-export="csv" disabled>导出 CSV</button>
+    <button class="button" type="button" data-profile-export="dat" disabled>导出 DAT</button>
+  </div>
+  <p class="field-help" data-coordinate-note>截面坐标按弦长归一化；DAT 为两列轮廓。</p>
+  <p class="field-help" data-output-status role="status"></p>
+  <details class="profile-output-more" data-output-more><summary>更多操作</summary>
+    <p class="field-help">保存叶型写入所选数据库。DAT 保留截断尾缘，不是 IGG 专用 DAT。</p>
+    <div class="button-row"><button class="button" type="button" data-profile-3d disabled>导出 GeomTurbo</button><a class="button" href="/api/workbench/dataset/export">下载数据库 ZIP</a></div>
+  <details data-sweep-panel><summary>批量生成数据集</summary>
+    <p class="field-help">固定其他参数，等距扫描一个参数。不可行项会报告原因，不会偷偷替换参数。</p>
+    <form data-sweep-form class="filter-bar">
+      <label>扫描参数<select name="parameter" data-sweep-parameter></select></label>
+      <label>下限<input name="minimum" type="number" step="any" required></label>
+      <label>上限<input name="maximum" type="number" step="any" required></label>
+      <label>截面数量<input name="count" type="number" min="1" max="100" value="10" required></label>
+      <button class="button primary" type="submit" data-sweep-start disabled>批量生成</button>
+    </form>
+    <p data-sweep-status role="status"></p>
+  </details>
+  {% if page == 'studio' %}
+  <details class="rail-design-tools"><summary>设计参数与历史</summary>
+    <p class="field-help">参数 JSON 用于恢复编辑；历史快照用于留存修订，不替代截面保存。</p>
+    <div class="rail-design-actions"><button class="button" type="button" data-import-spec>导入参数 JSON</button><button class="button" type="button" data-export-spec data-current-action disabled>下载参数 JSON</button><button class="button" type="button" data-save-workspace data-current-action disabled>备份历史快照</button><button class="button" type="button" data-rail-open-history>查看历史快照</button></div>
+  </details>
+  {% endif %}
+  </details>
+</section>
+<dialog data-geomturbo-dialog aria-label="GeomTurbo 导出设置">
+  <form class="dialog-form" data-geomturbo-form>
+    <h2>GeomTurbo 导出</h2>
+    <p class="field-help">将当前截面放置在叶根与叶尖。请明确输入尺寸（米）和安装角；两个截面共用当前叶型。需要不同截面时，在数据库中选择叶根、叶尖。</p>
+    <label>叶片数<input name="blade_count" type="number" min="1" required></label>
+    <label>旋转方向<select name="rotation_direction"><option value="ccw">逆时针（+周向）</option><option value="cw">顺时针（−周向）</option></select></label>
+    <div class="edge-grid">
+      <fieldset><legend>叶根</legend><label>截面<select name="root_id" required></select></label><label>半径（m）<input name="root_radius" type="number" min="0.000001" step="any" required></label><label>弦长（m）<input name="root_chord" type="number" min="0.000001" step="any" required></label><label>安装角（°）<input name="root_stagger" type="number" step="any" required></label></fieldset>
+      <fieldset><legend>叶尖</legend><label>截面<select name="tip_id" required></select></label><label>半径（m）<input name="tip_radius" type="number" min="0.000001" step="any" required></label><label>弦长（m）<input name="tip_chord" type="number" min="0.000001" step="any" required></label><label>安装角（°）<input name="tip_stagger" type="number" step="any" required></label></fieldset>
+    </div>
+    <p class="field-help">输出是项目自有 SECTIONAL 格式；NUMECA 原生导入兼容性尚未验证，不代表网格或 CFD 验收。</p>
+    <p data-geomturbo-error role="alert"></p>
+    <div class="button-row"><button class="button" type="button" data-close-geomturbo>取消</button><button class="button primary" type="submit">导出 GeomTurbo</button></div>
+  </form>
+</dialog>

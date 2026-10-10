@@ -63,26 +63,7 @@ def validate_profile(
         error("polygon_area", "叶型多边形面积退化", features.signed_area, "abs(area)>1e-10")
     if features.max_camber_ratio > 0.42:
         error("excessive_camber", "最大弯度超出生成域", features.max_camber_ratio, 0.42)
-    if (
-        max(
-            features.suction_max_abs_curvature,
-            features.pressure_max_abs_curvature,
-        )
-        > 250.0
-    ):
-        error(
-            "curvature_spike",
-            "非前尾缘区域曲率过大",
-            max(features.suction_max_abs_curvature, features.pressure_max_abs_curvature),
-            250.0,
-        )
-    if features.max_abs_curvature_gradient > 25000.0:
-        error(
-            "curvature_gradient",
-            "曲率梯度过大",
-            features.max_abs_curvature_gradient,
-            25000.0,
-        )
+    # Curvature and its gradient are diagnostics, not universal rejection criteria.
 
     if geometry.spec is not None:
         thickness_error = abs(features.max_thickness_ratio - geometry.spec.max_thickness_ratio)
@@ -137,6 +118,7 @@ def _report(
     return ValidationReport(
         geometry_id=geometry.geometry_id,
         status=status,
+        rule_version="geometry-rules-v1-curvature-diagnostic",
         issues=issues,
         metrics=metrics,
     )

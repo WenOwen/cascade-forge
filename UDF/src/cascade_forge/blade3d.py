@@ -23,10 +23,10 @@ def build_blade(schedule: SectionSchedule, geometry_source: GeometrySource) -> B
 
     definitions = schedule.sections
     output_count = schedule.output_section_count or len(definitions)
-    target_spans = np.linspace(
-        definitions[0].span_fraction,
-        definitions[-1].span_fraction,
-        output_count,
+    target_spans = (
+        np.linspace(definitions[0].span_fraction, definitions[-1].span_fraction, output_count)
+        if schedule.output_section_count is not None
+        else np.asarray([section.span_fraction for section in definitions])
     )
     sections: list[BladeSection] = []
     warnings: list[str] = []

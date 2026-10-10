@@ -105,6 +105,7 @@ def create_app(
     v2_dataset_root: str | Path | None = None,
     workspace_root: str | Path | None = None,
     naca65_dataset_root: str | Path | None = None,
+    profile_database_root: str | Path | None = None,
 ) -> FastAPI:
     dataset_root = Path(dataset_root).resolve()
     manifest_path = dataset_root / "dataset_manifest.json"
@@ -153,15 +154,25 @@ def create_app(
     application.state.jobs_naca65 = jobs_naca65
     application.state.v2_dataset_root = resolved_v2_root
     application.state.dataset_root = dataset_root
+    application.state.profile_database_root = (
+        Path(profile_database_root).resolve() if profile_database_root
+        else resolved_v2_root.parent / "databases"
+    )
     application.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
+
+    from .workbench import register_workbench
+
+    register_workbench(application, templates)
 
     @application.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request,
-            "pages/overview.html",
-            _page_context("overview", store_v2, workspace),
-        )
+        return studio_page(request)
+
+    @application.get("/standard", response_class=HTMLResponse)
+    def standard_page(request: Request) -> HTMLResponse:
+        context = _page_context("standard", store_v2, workspace)
+        context["default_arc_spec"] = default_double_arc_spec().model_dump(mode="json")
+        return templates.TemplateResponse(request, "pages/standard.html", context)
 
     @application.get("/studio", response_class=HTMLResponse)
     def studio_page(request: Request) -> HTMLResponse:

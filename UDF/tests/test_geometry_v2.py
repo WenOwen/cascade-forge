@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from cascade_forge.curves import CurveEvaluator, angle_between_lines, signed_curvature
+from cascade_forge.features import extract_features
 from cascade_forge.geometry2d import generate_profile
 from cascade_forge.geometry_v2 import resolve_geometry_spec
 from cascade_forge.models import Handedness
@@ -54,7 +55,7 @@ def test_unified_bspline_g2_contract(
 
     report = validate_profile(geometry)
     assert report.valid, [issue.model_dump() for issue in report.issues]
-    assert report.rule_version == "geometry-rules-v2-g2"
+    assert report.rule_version == "geometry-rules-v2-g2-curvature-diagnostic"
 
     for circle_name, center_name, target_radius in (
         ("leading_osculating_circle", "leading_edge_center", 0.008),
@@ -64,6 +65,34 @@ def test_unified_bspline_g2_contract(
         center = np.asarray(geometry.metadata[center_name])
         radii = np.linalg.norm(circle - center, axis=1)
         np.testing.assert_allclose(radii, target_radius, atol=1e-12)
+
+
+def test_curvature_is_diagnostic_not_a_fixed_limit(intent):
+    from cascade_forge.validation_v2 import validate_profile_v2 as validate_v2
+
+    geometry = generate_profile(GeometrySpecV2(intent=intent))
+    features = extract_features(geometry).model_copy(update={
+        "max_abs_curvature_gradient": 1e12,
+        "suction_max_abs_curvature": 1e9,
+        "pressure_max_abs_curvature": 1e9,
+    })
+    report = validate_v2(geometry, features=features)
+    assert report.status.value == "valid"
+    assert report.metrics["max_abs_curvature_gradient"] == 1e12
+    assert report.metrics["max_abs_curvature"] == 1e9
+    assert not any(issue.code in {"curvature_gradient", "curvature_spike"}
+                   for issue in report.issues)
+    for field in ("suction", "thickness"):
+        values = [list(point) for point in geometry.suction] if field == "suction" else list(
+            geometry.thickness)
+        if field == "suction":
+            values[-1][0] += 0.01
+        else:
+            values[len(values) // 2] = -0.01
+        invalid = validate_v2(geometry.model_copy(update={field: values}), features=features)
+        assert invalid.status.value == "rejected"
+        expected = "outline_closure" if field == "suction" else "non_positive_thickness"
+        assert any(issue.code == expected for issue in invalid.issues)
 
 
 def test_endpoint_g2_shares_tangent_and_osculating_radius(

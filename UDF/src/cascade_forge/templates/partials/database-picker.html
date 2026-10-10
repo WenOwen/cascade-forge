@@ -1,0 +1,9 @@
+<section class="database-picker" data-database-picker>
+  <label>当前数据库<select data-database-select aria-label="当前数据库"></select></label>
+  <details class="database-management" data-database-management><summary>数据库管理</summary>
+  <div class="button-row"><button class="button" type="button" data-database-create>新建数据库</button><button class="button" type="button" data-database-scan>扫描 DAT</button></div>
+  <p class="field-help database-path" data-database-path></p>
+  <form data-database-new-form hidden><label>数据库名称<input name="name" maxlength="80" required></label><div class="button-row"><button class="button primary" type="submit">创建</button><button class="button" type="button" data-database-cancel>取消</button></div></form>
+  </details>
+  <p class="field-help" data-database-feedback role="status"></p>
+</section>

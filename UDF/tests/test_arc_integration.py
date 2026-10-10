@@ -206,10 +206,13 @@ def test_arc_web_supports_the_multiple_arc_family(client: TestClient) -> None:
     assert geometry["diagnostics"]["node_tangency_error"] < 1e-14
 
 
-def test_arc_page_is_reachable_from_the_sidebar(client: TestClient) -> None:
+def test_double_arc_is_reachable_from_the_standard_workbench(client: TestClient) -> None:
     home = client.get("/")
     assert home.status_code == 200
-    assert 'href="/arc"' in home.text
+    assert 'href="/standard"' in home.text
+    standard = client.get("/standard")
+    assert standard.status_code == 200
+    assert 'data-standard-family="double_arc"' in standard.text
 
 
 # --------------------------------------------------------------------------------------

@@ -9,7 +9,8 @@ def test_database_filter_totals_search_and_pagination(tmp_path):
     with TestClient(create_app(tmp_path / "v1", v2_dataset_root=tmp_path / "v2")) as client:
         for filters, expected in [
             ({}, 1),
-            ({"status": "valid"}, 0),
+            ({"status": "valid"}, 1),
+            ({"status": "warning"}, 0),
             ({"origin": "anchor_fit"}, 0),
             ({"search": geometry.geometry_id.upper()[5:18]}, 1),
             ({"search": "  " + geometry.geometry_id + "  "}, 1),

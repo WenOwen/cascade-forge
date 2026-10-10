@@ -1,0 +1,56 @@
+.generation-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.generation-layout > .studio-main { min-width: 0; }
+.plotly-chart { background: #edf4fb; border: 1px solid #d7e4f0; border-radius: 10px; }
+.generation-layout .profile-frame { height: 420px; }
+.generation-layout .profile-frame .plotly-chart { height: 100%; }
+.generation-layout .canvas-card { padding: 18px; }
+.geometry-issues { margin-top: 14px; padding: 12px; border: 1px solid #f0d8ab; border-radius: 8px; background: #fff8ec; }
+.geometry-issues h3 { margin: 0 0 10px; font-size: 14px; }
+.geometry-issues ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.geometry-issues li { padding: 8px 10px; border-left: 3px solid #c78513; background: #fffdf8; overflow-wrap: anywhere; }
+.geometry-issues li[data-severity="error"] { border-left-color: #d70015; background: #fff2f2; }
+.geometry-issues strong { font-size: 13px; }
+.geometry-issues p { margin: 6px 0; font-size: 12px; line-height: 1.7; }
+.geometry-issues .button { margin-top: 4px; }
+.studio-diagnostics { scroll-margin-top: 100px; }
+.analysis-controls { margin: 10px 0; font-size: 12px; }
+.analysis-help { margin: 14px 0 0; padding: 12px; border: 1px solid #d7e4f0; border-radius: 8px; background: #f3f7fb; font-size: 12px; line-height: 1.8; }
+.generation-layout .geometry-meta, .generation-layout [data-standard-id] { overflow-wrap: anywhere; font-size: 11px; }
+.profile-rail { min-width: 0; position: sticky; top: 16px; max-height: calc(100dvh - 150px); overflow-y: auto; padding: 16px; scrollbar-gutter: stable; }
+.database-picker { display: grid; gap: 10px; margin-bottom: 16px; }
+.database-picker .field-help { margin: 0; font-size: 11px; white-space: pre-wrap; }
+.database-path { overflow-wrap: anywhere; }
+.database-management > summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.database-management[open] > summary { margin-bottom: 10px; }
+.database-management > .database-path { margin: 10px 0; }
+.database-management form { margin-top: 10px; }
+.database-picker form { display: grid; gap: 10px; }
+.rail-tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.rail-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 10px 4px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.rail-tabs button[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); font-weight: 650; }
+.rail-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.rail-design-actions { display: grid; gap: 8px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line-soft); }
+.profile-rail [data-profile-output] { border: 0; padding: 0; box-shadow: none; background: transparent; margin: 0; }
+.profile-rail [data-profile-output] h2 { font-size: 15px; }
+.profile-rail [data-profile-output] > .profile-primary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.profile-rail .profile-primary-actions [data-profile-save] { grid-column: 1 / -1; }
+.profile-output-more { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.profile-output-more > .button-row, .rail-design-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.profile-output-more summary, .rail-history-source summary { font-size: 13px; cursor: pointer; }
+.profile-output-more[open] > summary, .rail-history-source[open] > summary { margin-bottom: 12px; }
+.profile-output-more > details { margin-top: 16px; }
+.rail-history-source { margin-bottom: 12px; }
+.profile-rail .rail-design-actions { margin-top: 12px; margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.profile-rail [data-profile-output] .field-help { font-size: 12px; overflow-wrap: anywhere; }
+.profile-rail [data-sweep-form] { display: grid; grid-template-columns: 1fr; }
+.profile-rail [data-sweep-status], .profile-rail [data-rail-status] { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.profile-rail [data-rail-panel="saved"] { display: grid; gap: 12px; }
+.rail-saved-list { display: grid; gap: 10px; }
+.rail-saved-card { display: grid; gap: 6px; border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px; }
+.rail-saved-card strong { font-size: 13px; }
+.rail-saved-card small { color: var(--muted); overflow-wrap: anywhere; font-size: 11px; }
+.profile-rail .pagination { gap: 6px; font-size: 12px; margin-top: 0; }
+.profile-rail .button { white-space: nowrap; }
+@media (max-width: 1280px) { .generation-layout { grid-template-columns: 220px minmax(0, 1fr) 250px; gap: 12px; } }
+@media (max-width: 1100px) { .generation-layout { grid-template-columns: minmax(0, 1fr) 270px; } .generation-layout > .inspector { grid-column: 1; position: static; max-height: none; } .generation-layout > .studio-main { grid-column: 1; } .generation-layout > .profile-rail { grid-column: 2; grid-row: 1 / span 2; } }
+@media (max-width: 760px) { .generation-layout { grid-template-columns: minmax(0, 1fr); } .generation-layout > .profile-rail { grid-column: 1; grid-row: auto; position: static; max-height: none; } .generation-layout .profile-frame { height: 320px; } }

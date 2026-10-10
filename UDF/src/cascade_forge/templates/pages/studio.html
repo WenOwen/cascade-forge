@@ -6,11 +6,10 @@
   <div class="range-row"><span data-min-label>{{ minimum }}</span><input type="range" data-range aria-label="{{ label }}滑动条" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"><span data-max-label>{{ maximum }}</span></div>
 </div>
 {%- endmacro %}
-{% block page_title %}叶型工作室{% endblock %}
-{% block extra_scripts %}<link rel="stylesheet" href="/static/workspace.css?v=1"><script src="/static/workspace.js?v=2" defer></script>{% endblock %}
-{% block toolbar_actions %}<button class="button" type="button" data-open-workspace>我的设计</button><button class="button" type="button" data-import-spec>导入设计</button><button class="button" type="button" data-export-spec data-current-action disabled>下载设计参数</button><button class="button primary" type="button" data-save-workspace data-current-action disabled>保存设计</button>{% endblock %}
+{% block page_title %}自定义叶型{% endblock %}
+{% block extra_scripts %}<script src="/static/profile-output.js?v=6" defer></script>{% endblock %}
 {% block content %}
-<div class="studio-layout" data-studio-root data-default-spec='{{ default_spec_v2|tojson }}'>
+<div class="generation-layout" data-studio-root data-default-spec='{{ default_spec_v2|tojson }}'>
   <aside class="surface-card inspector">
     <form id="studio-form" class="inspector-form">
       <p class="field-help">先调角度和厚度，轮廓会自动更新。t/c = 0.10 表示厚度为弦长的 10%。</p>
@@ -32,15 +31,15 @@
         {{ parameter('aft_shape_factor', '后段形状因子', 0.5, 1.8, 0.05) }}
       </fieldset>
       </details>
-      <details class="json-panel"><summary>设计参数文件（Spec JSON）</summary><p class="field-help">显示后端最后一次成功解析的完整合同。修改后点击“应用 JSON”。</p><textarea name="explicit_spec" rows="15" spellcheck="false"></textarea><p class="json-error" data-json-error role="alert"></p><div class="button-row"><button class="button primary" type="button" data-apply-json>应用 JSON</button><button class="button" type="button" data-revert-json>恢复</button><button class="button" type="button" data-copy-json>复制</button></div></details>
     </form>
   </aside>
   <section class="studio-main"><div class="studio-current"><span data-design-label>未命名叶型</span><span data-design-save-state role="status">预览准备中</span></div><div class="studio-feedback" data-studio-feedback hidden><p data-studio-error role="alert"></p><button class="button" type="button" data-restore-preview>恢复上次成功预览</button></div>
-    <article class="surface-card canvas-card"><div class="card-heading"><div><p class="eyebrow">AXIAL–TANGENTIAL PREVIEW</p><h2>叶型预览</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div></div><div class="button-row studio-chart-actions"><label class="switch-row"><input type="checkbox" data-show-controls> 显示控制线</label><button class="button" type="button" data-export-coordinates data-current-action disabled>下载叶面坐标 CSV</button></div><div class="geometry-meta"><code data-geometry-id>—</code><span data-validation-status class="pill">—</span><span data-intent-id>—</span></div></article>
-    <details class="surface-card studio-diagnostics"><summary>形状检查：厚度、曲率与头尾放大</summary><p class="field-help">厚度看分布，曲率看局部平顺性；这些图用于检查几何形状。</p><article class="analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">金属线角度</button></div><div id="analysis-chart" class="plotly-chart analysis-chart"></div></article>
+    <article class="surface-card canvas-card"><div class="card-heading"><div><h2>叶型预览</h2></div><div class="button-row"><span class="pill" data-preview-state>等待计算</span><button class="icon-button" type="button" data-reset-view title="重置视图">↺</button></div></div><div class="chart-frame profile-frame"><div id="profile-chart" class="plotly-chart"></div></div><div class="button-row studio-chart-actions"><label class="switch-row"><input type="checkbox" data-show-controls> 显示控制线</label></div><div class="geometry-meta"><code data-geometry-id hidden>—</code><span data-validation-status class="pill">—</span></div><section class="geometry-issues" data-geometry-issues hidden aria-label="几何检查明细"><h3>几何检查明细</h3><ul data-geometry-issue-list></ul><p class="field-help">警告阈值是几何筛查规则，不是气动性能验收标准；保存或导出不代表通过 CFD 验证。</p></section></article>
+    <details class="surface-card studio-diagnostics"><summary>形状检查：厚度、曲率、角度与头尾放大</summary><p class="field-help">厚度看分布，曲率看局部平顺性；这些图用于检查几何形状。</p><article class="analysis-card"><div class="tab-list"><button class="active" data-analysis="thickness">厚度</button><button data-analysis="curvature">曲率</button><button data-analysis="gradient">曲率梯度</button><button data-analysis="angle">金属线角度</button></div><div class="analysis-controls" data-analysis-controls hidden><label class="switch-row"><input type="checkbox" data-analysis-interior checked>只看叶面内部（排除两端采样点）</label></div><p class="field-help" data-analysis-summary role="status"></p><div id="analysis-chart" class="plotly-chart analysis-chart"></div><p class="analysis-help" data-analysis-help></p></article>
     <div class="edge-grid"><article class="surface-card"><div class="card-heading"><h2>前缘 LE</h2><span data-le-radius class="mono-value">—</span></div><div id="le-chart" class="plotly-chart edge-chart"></div></article><article class="surface-card"><div class="card-heading"><h2>尾缘 TE</h2><span data-te-radius class="mono-value">—</span></div><div id="te-chart" class="plotly-chart edge-chart"></div></article></div>
     </details>
   </section>
+  {% include "partials/profile-rail.html" %}
 </div>
-<dialog id="workspace-dialog" aria-labelledby="save-design-title"><form class="dialog-form"><h2 id="save-design-title">保存设计</h2><p class="field-help">同名保存会新增修订，保留之前的版本。</p><label>设计名称<input name="name" value="未命名叶型" maxlength="120" required></label><label>标签<input name="tags" placeholder="逗号分隔"></label><p class="json-error" data-save-error role="alert"></p><div class="button-row"><button class="button" type="button" data-cancel-save>取消</button><button class="button primary" type="submit">保存修订</button></div></form></dialog>{% include "partials/workspace-browser.html" %}<input type="file" accept="application/json" hidden data-spec-file>
+<dialog id="workspace-dialog" aria-labelledby="save-design-title"><form class="dialog-form"><h2 id="save-design-title">备份历史快照</h2><p class="field-help">同名保存会新增修订，保留之前的版本。</p><label>设计名称<input name="name" value="未命名叶型" maxlength="120" required></label><label>标签<input name="tags" placeholder="逗号分隔"></label><p class="json-error" data-save-error role="alert"></p><div class="button-row"><button class="button" type="button" data-cancel-save>取消</button><button class="button primary" type="submit">备份快照</button></div></form></dialog><input type="file" accept="application/json" hidden data-spec-file>
 {% endblock %}

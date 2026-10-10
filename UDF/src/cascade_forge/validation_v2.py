@@ -136,14 +136,7 @@ def validate_profile_v2(
         ),
         "max_abs_curvature_gradient": features.max_abs_curvature_gradient,
     }
-    if metrics["max_abs_curvature_gradient"] > 50000.0:
-        add(
-            "warning",
-            "curvature_gradient",
-            "叶面曲率梯度偏高",
-            metrics["max_abs_curvature_gradient"],
-            50000.0,
-        )
+    # Curvature metrics remain diagnostic; no universal upper limit is imposed.
 
     if cascade_context is not None:
         pitch = 1.0 / cascade_context.solidity
@@ -165,7 +158,7 @@ def validate_profile_v2(
     return ValidationReport(
         geometry_id=geometry.geometry_id,
         status=status,
-        rule_version="geometry-rules-v2-g2",
+        rule_version="geometry-rules-v2-g2-curvature-diagnostic",
         issues=issues,
         metrics=metrics,
     )

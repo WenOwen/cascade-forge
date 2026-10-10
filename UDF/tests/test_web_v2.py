@@ -100,7 +100,7 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
 
         listing = client.get(
             "/api/v2/geometries",
-            params={"origin": "generated", "status": "warning"},
+            params={"origin": "generated", "status": "valid"},
         ).json()
         assert listing["total"] == 1
         assert listing["items"][0]["geometry_id"] == geometry.geometry_id

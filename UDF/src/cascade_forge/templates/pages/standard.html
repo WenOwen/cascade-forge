@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}标准叶型 · Cascade Forge{% endblock %}
+{% block page_title %}标准叶型{% endblock %}
+{% block extra_scripts %}<script src="/static/profile-output.js?v=6" defer></script><script src="/static/standard.js?v=2" defer></script>{% endblock %}
+{% block content %}
+<div data-standard-root data-default-arc='{{ default_arc_spec|tojson }}'>
+  <div class="segmented" role="group" aria-label="标准叶型系列"><button class="active" type="button" data-standard-family="naca65">NACA65 系列</button><button type="button" data-standard-family="double_arc">双圆弧系列</button></div>
+  <section class="generation-layout">
+    <aside class="surface-card inspector"><form data-standard-form class="inspector-form">
+      <fieldset data-standard-fields="naca65"><legend>NACA65 参数</legend>
+        <label>翼型族<select name="naca_family"><option value="65-compressor">NACA65 压气机（圆尾缘）</option><option value="65">NACA65（尖尾缘）</option><option value="65A">NACA65A（尖尾缘）</option></select></label>
+        <label>名义厚度 t/c<input name="thickness_ratio" type="number" min="0.03" max="0.18" step="0.005" value="0.10" required></label>
+        <label>设计升力系数 Clᵢ<input name="design_lift_coefficient" type="number" min="0" max="2" step="0.1" value="0.8" required></label>
+        <label>载荷参数 a<input name="loading_parameter_a" type="number" min="0" max="1" step="0.05" value="1" required readonly></label>
+        <p class="field-help">压气机使用 TR 1368 厚度表，a 固定为 1；65A 固定为 0.8。这里直接生成原生轮廓，不进行拟合。</p>
+      </fieldset>
+      <fieldset data-standard-fields="double_arc" hidden disabled><legend>双圆弧参数</legend>
+        <label>进口金属角 χ₁（°）<input name="inlet_metal_angle_deg" type="number" min="0.5" max="88.9" step="0.5" value="30" required></label>
+        <label>出口金属角 χ₂（°）<input name="outlet_metal_angle_deg" type="number" min="0.5" max="88.9" step="0.5" value="20" required></label>
+        <p class="field-help">金属角以弦线为基准。两段圆弧在最大弯度处相切。</p>
+        <label>最大厚度 t/c<input name="max_thickness_ratio" type="number" min="0.02" max="0.25" step="0.005" value="0.10" required></label>
+        <label>厚度位置 sₜ<input name="max_thickness_station" type="number" min="0.20" max="0.75" step="0.01" value="0.40" required></label>
+        <label>标称前缘半径<input name="leading_edge_radius_ratio" type="number" min="0.0005" max="0.05" step="0.0005" value="0.006" required></label>
+        <label>尾缘厚度 tTE/c<input name="trailing_edge_thickness_ratio" type="number" min="0.0005" max="0.05" step="0.0005" value="0.006" required></label>
+        <label>尾缘半楔角（°）<input name="trailing_edge_half_wedge_deg" type="number" min="0.51" max="44.9" step="0.01" value="6" required></label>
+        <p class="field-help" data-standard-limits>生成前会校验厚度、楔角和轮廓可行性。</p>
+      </fieldset>
+      <button class="button primary" type="submit">生成叶型</button><p data-standard-error role="alert"></p>
+    </form></aside>
+    <section class="studio-main">
+      <article class="surface-card canvas-card"><div class="card-heading"><h2 data-standard-name>叶型预览</h2><span class="pill" data-standard-state>尚未生成</span></div><div id="standard-chart" class="plotly-chart profile-frame empty-chart" data-empty="调整参数，点击生成叶型"></div><p class="field-help" data-standard-id hidden></p></article>
+    </section>
+    {% include "partials/profile-rail.html" %}
+  </section>
+</div>
+{% endblock %}

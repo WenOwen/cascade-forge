@@ -1,11 +1,32 @@
 {% extends "base.html" %}
-{% block page_title %}数据库{% endblock %}
+{% block page_title %}数据库浏览{% endblock %}
+{% block extra_scripts %}<link rel="stylesheet" href="/static/profile-database.css?v=3"><script src="/static/profile-output.js?v=6" defer></script><script src="/static/profile-database.js?v=4" defer></script>{% endblock %}
 {% block content %}
-<section class="surface-card" data-database-root>
-  <form class="filter-bar" data-database-filters><label>Geometry ID 搜索<input type="search" name="search" maxlength="120" placeholder="输入完整 ID 或片段"></label><label>来源<select name="origin"><option value="">全部</option><option value="generated">正式生成</option><option value="anchor_fit">NASA 拟合</option></select></label><label>状态<select name="status"><option value="">全部</option><option value="valid">有效</option><option value="warning">警告</option><option value="rejected">拒绝</option></select></label><label>排序<select name="sort"><option value="geometry_id">Geometry ID</option><option value="max_thickness_ratio">最大厚度</option><option value="max_thickness_x_ratio">厚度位置</option><option value="inlet_metal_angle_deg">进口角</option></select></label><label>顺序<select name="descending"><option value="false">升序</option><option value="true">降序</option></select></label><label>每页<select name="limit"><option value="25">25 条</option><option value="50" selected>50 条</option><option value="100">100 条</option></select></label><button class="button primary" type="submit">应用筛选</button><button class="button" type="reset">重置筛选</button></form>
-  <div class="table-toolbar"><span data-database-count role="status">正在读取记录…</span><span data-selection-count aria-live="polite">已选 0 条（跨页保留）</span><div class="button-row"><button class="button" data-clear-selected disabled>清空选择</button><button class="button" data-compare-selected disabled>比较所选</button><label>导出格式<select data-export-format aria-label="导出格式"><option value="csv">CSV 坐标</option><option value="json">JSON 几何</option></select></label><button class="button" data-export-selected disabled>导出所选单条</button></div></div>
-  <p class="muted">比较支持 2–12 个不同叶型；导出请选择 1 条。筛选和翻页保留已选记录。</p><p data-database-error role="alert" hidden></p><button class="button" data-database-retry hidden>重新加载</button><div class="table-scroll"><table class="data-table"><thead><tr><th><input type="checkbox" data-select-page aria-label="选择本页全部叶型" disabled></th><th>Geometry ID</th><th>内核</th><th>状态</th><th>tmax/c</th><th>xt/c</th><th>进口角</th><th></th></tr></thead><tbody data-database-body></tbody></table></div>
-  <div class="pagination"><button class="button" data-page-prev disabled>上一页</button><span data-page-label>第 1 页</span><button class="button" data-page-next disabled>下一页</button></div>
-</section>
-<dialog id="geometry-detail" aria-label="叶型详情"><div class="detail-dialog"><button class="dialog-close" type="button" data-close-dialog aria-label="关闭叶型详情">×</button><div data-detail-content></div></div></dialog>
+<div class="library-workbench" data-profile-database>
+  <aside class="surface-card library-sidebar" aria-label="叶型样本选择">
+    {% include "partials/database-picker.html" %}
+    <form class="library-filters" data-library-filters>
+      <label>名称 / ID 搜索<input type="search" name="search" maxlength="120"></label>
+      <label>叶型系列<select name="family"><option value="">全部</option><option value="custom">自定义</option><option value="naca65">NACA65</option><option value="double_arc">双圆弧</option><option value="imported">DAT 导入</option></select></label>
+      <div class="button-row"><button class="button primary" type="submit">查询</button><button class="button" type="reset">重置</button></div>
+    </form>
+    <p data-library-count role="status">正在读取…</p>
+    <p class="field-help">点击样本查看；勾选样本并排比较，最多 4 个。翻页保留勾选。</p>
+    <p class="library-error" data-library-error role="alert"></p>
+    <div class="library-samples" data-library-body aria-label="可滚动样本列表" tabindex="0"></div>
+    <div class="pagination"><button class="button" type="button" data-library-prev disabled>上一页</button><span data-library-page>第 1 页</span><button class="button" type="button" data-library-next disabled>下一页</button></div>
+  </aside>
+  <section class="library-main" aria-label="叶型预览与比较">
+    <article class="surface-card library-preview">
+      <div class="card-heading"><div><h2 data-library-name>叶型预览</h2><p class="field-help" data-library-selection role="status">从左侧选择样本</p></div><button class="button" type="button" data-library-clear disabled>清空比较</button></div>
+      <div class="library-preview-empty" data-library-empty>选择一个样本查看叶型，勾选 2–4 个样本并排比较。</div>
+      <div class="library-comparison" data-library-charts></div>
+      <p class="field-help" data-library-id hidden></p>
+    </article>
+    <section data-library-detail hidden>
+      <p class="field-help" data-library-export-target></p>
+      {% include "partials/profile-output.html" %}
+    </section>
+  </section>
+</div>
 {% endblock %}

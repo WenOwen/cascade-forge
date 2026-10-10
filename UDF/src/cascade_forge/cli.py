@@ -171,6 +171,7 @@ def serve_command(
     v2_dataset: Annotated[Path | None, typer.Option()] = None,
     workspace: Annotated[Path | None, typer.Option()] = None,
     naca65_dataset: Annotated[Path | None, typer.Option()] = None,
+    databases: Annotated[Path | None, typer.Option()] = None,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8000,
 ) -> None:
@@ -184,6 +185,7 @@ def serve_command(
             v2_dataset_root=v2_dataset,
             workspace_root=workspace,
             naca65_dataset_root=naca65_dataset,
+            profile_database_root=databases or Path(__file__).resolve().parents[3] / "databases",
         ),
         host=host,
         port=port,
