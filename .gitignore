@@ -1,20 +1,19 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
-UDF/.venv/
-UDF/build/
-UDF/dist/
-UDF/artifacts/
-UDF/datasets/
+
+# Runtime data & outputs
 /databases/
-UDF/data/raw/NACA65/
-UDF/logs/
-UDF/output/
-UDF/tmp/
-UDF/.pytest-temproot/
-UDF/.playwright-cli/
-/.playwright-cli/
-/output/playwright/
+/datasets/*/
+!/datasets/.gitkeep
+/output/
+/artifacts/
+/tmp/
 *.duckdb.wal
+
+# IDE
+.vscode/
+.idea/
