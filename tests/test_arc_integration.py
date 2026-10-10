@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
+from cascade_forge.api.app import create_app
 from cascade_forge.cli import app
-from cascade_forge.web import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 V1_DATASET = REPO_ROOT / "datasets" / "geometry-v1.0.0"
@@ -118,7 +118,7 @@ def test_arc_web_page_and_offline_assets(client: TestClient) -> None:
     page = client.get("/arc")
     assert page.status_code == 200
     assert "圆弧族实验室" in page.text
-    assert 'data-arc-root' in page.text
+    assert "data-arc-root" in page.text
     script = client.get("/static/arc.js")
     assert script.status_code == 200
     assert "arc-profile-chart" in script.text

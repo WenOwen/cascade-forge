@@ -1,11 +1,11 @@
 // Run against the local app; mock catalog reads only, never write production datasets.
 // PLAYWRIGHT_MODULE may point at an existing Playwright installation.
 const assert = require('node:assert/strict');
-require('node:fs').mkdirSync('UDF/output', { recursive: true });
+require('node:fs').mkdirSync('output/playwright', { recursive: true });
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.CF_CHROMIUM });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const errors = [];
@@ -17,14 +17,19 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
       });
       assert.equal(response.status(), 200); native.push(await response.json());
     }
-    const fixtures = Array.from({ length: 30 }, (_, i) => ({ ...native[i % 5], geometry_id: `${native[i % 5].geometry_id}-fixture-${i}`, name: `测试样本 ${i + 1}` }));
+    const fixtures = Array.from({ length: 30 }, (_, i) => ({ ...native[i % 5], geometry_id: `${native[i % 5].geometry_id}-fixture-${i}`, name: `测试样本 ${i + 1}`, label: `测试样本 ${i + 1}` }));
     let failFirst = false;
     await page.route('**/api/workbench/profiles**', async route => {
       const url = new URL(route.request().url()), id = url.pathname.split('/')[4];
+      if (route.request().method() === 'DELETE') {
+        const index = fixtures.findIndex(item => item.geometry_id === decodeURIComponent(id));
+        if (index < 0) return route.fulfill({status: 404, json: {detail: 'not found'}});
+        fixtures.splice(index, 1); return route.fulfill({json: {deleted: true}});
+      }
       if (!id) {
         const offset = Number(url.searchParams.get('offset') || 0), search = url.searchParams.get('search') || '';
         const filtered = fixtures.filter(item => item.name.includes(search) || item.geometry_id.includes(search));
-        return route.fulfill({ json: { total: filtered.length, items: filtered.slice(offset, offset + 25).map(item => ({ geometry_id: item.geometry_id, family: item.family, name: item.name })) } });
+        return route.fulfill({ json: { total: filtered.length, items: filtered.slice(offset, offset + 25).map(item => ({ geometry_id: item.geometry_id, family: item.family, name: item.name, label: item.label })) } });
       }
       if (failFirst && id === fixtures[0].geometry_id) return route.fulfill({ status: 500, json: { detail: '测试读取失败' } });
       const item = fixtures.find(item => item.geometry_id === decodeURIComponent(id));
@@ -59,7 +64,7 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     await page.locator('[data-library-prev]').click();
     await page.waitForFunction(() => document.querySelector('[data-library-page]').textContent === '第 1 页');
     assert.equal(await page.locator('[data-library-body] input:checked').count(), 4);
-    await page.screenshot({ path: 'UDF/output/database-four-compare.png', fullPage: true });
+    await page.screenshot({ path: 'output/playwright/database-four-compare.png', fullPage: true });
     await inputs.nth(3).uncheck(); await waitCharts(3);
     await page.locator('[data-library-clear]').click(); await waitCharts(1);
     assert.equal(await page.locator('[data-library-body] input:checked').count(), 0);
@@ -74,7 +79,15 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     await page.setViewportSize({ width: 390, height: 844 });
     await inputs.nth(0).check(); await waitCharts(1); await inputs.nth(1).check(); await waitCharts(2);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false);
-    await page.screenshot({ path: 'UDF/output/database-compare-mobile.png', fullPage: true });
+    await page.screenshot({ path: 'output/playwright/database-compare-mobile.png', fullPage: true });
+    page.on('dialog', dialog => dialog.accept());
+    const deleted = fixtures[1].geometry_id;
+    await page.locator('[data-delete-sample]').nth(1).click();
+    await page.waitForFunction(() => document.querySelector('[data-library-count]').textContent === '共 29 个叶型');
+    await waitCharts(1);
+    assert.equal(await page.locator(`[data-sample-id="${deleted}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-chart-id="${deleted}"]`).count(), 0);
+    assert.match(await page.locator('.library-sample .geometry-id').first().textContent(), /fixture/);
     await page.locator('[data-library-clear]').click(); await waitCharts(1);
     await page.locator('.library-sample-button').nth(4).click(); await waitCharts(1);
     // Check error isolation and retry without a full-page reload.

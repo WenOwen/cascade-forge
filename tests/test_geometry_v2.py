@@ -3,19 +3,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cascade_forge.curves import CurveEvaluator, angle_between_lines, signed_curvature
-from cascade_forge.features import extract_features
-from cascade_forge.geometry2d import generate_profile
-from cascade_forge.geometry_v2 import resolve_geometry_spec
-from cascade_forge.models import Handedness
-from cascade_forge.models_v2 import (
+from cascade_forge.domain.curves import CurveEvaluator, angle_between_lines, signed_curvature
+from cascade_forge.domain.features import extract_features
+from cascade_forge.domain.geometry import generate_profile, resolve_geometry_spec
+from cascade_forge.domain.models import (
     GeometryIntentV2,
     GeometrySpecV2,
+    Handedness,
     MetalAngleReference,
     axial_to_tangential_angle,
     tangential_to_axial_angle,
 )
-from cascade_forge.validation import validate_profile
+from cascade_forge.domain.validation import validate_profile
 
 
 @pytest.fixture(scope="module")
@@ -32,9 +31,7 @@ def intent() -> GeometryIntentV2:
 
 
 @pytest.mark.parametrize("handedness", [Handedness.RIGHT, Handedness.LEFT])
-def test_unified_bspline_g2_contract(
-    intent: GeometryIntentV2, handedness: Handedness
-) -> None:
+def test_unified_bspline_g2_contract(intent: GeometryIntentV2, handedness: Handedness) -> None:
     geometry = generate_profile(
         GeometrySpecV2(intent=intent.model_copy(update={"handedness": handedness}))
     )
@@ -68,23 +65,29 @@ def test_unified_bspline_g2_contract(
 
 
 def test_curvature_is_diagnostic_not_a_fixed_limit(intent):
-    from cascade_forge.validation_v2 import validate_profile_v2 as validate_v2
+    from cascade_forge.domain.validation import validate_profile as validate_v2
 
     geometry = generate_profile(GeometrySpecV2(intent=intent))
-    features = extract_features(geometry).model_copy(update={
-        "max_abs_curvature_gradient": 1e12,
-        "suction_max_abs_curvature": 1e9,
-        "pressure_max_abs_curvature": 1e9,
-    })
+    features = extract_features(geometry).model_copy(
+        update={
+            "max_abs_curvature_gradient": 1e12,
+            "suction_max_abs_curvature": 1e9,
+            "pressure_max_abs_curvature": 1e9,
+        }
+    )
     report = validate_v2(geometry, features=features)
     assert report.status.value == "valid"
     assert report.metrics["max_abs_curvature_gradient"] == 1e12
     assert report.metrics["max_abs_curvature"] == 1e9
-    assert not any(issue.code in {"curvature_gradient", "curvature_spike"}
-                   for issue in report.issues)
+    assert not any(
+        issue.code in {"curvature_gradient", "curvature_spike"} for issue in report.issues
+    )
     for field in ("suction", "thickness"):
-        values = [list(point) for point in geometry.suction] if field == "suction" else list(
-            geometry.thickness)
+        values = (
+            [list(point) for point in geometry.suction]
+            if field == "suction"
+            else list(geometry.thickness)
+        )
         if field == "suction":
             values[-1][0] += 0.01
         else:
@@ -161,6 +164,4 @@ def test_stagger_with_synchronized_metal_angles_is_rigid_placement(
     assert moved.geometry_id == baseline.geometry_id
     assert moved.intent_id == baseline.intent_id
     np.testing.assert_allclose(moved.suction, baseline.suction, atol=1e-13)
-    assert moved.realized_stagger_deg == pytest.approx(
-        baseline.realized_stagger_deg + delta
-    )
+    assert moved.realized_stagger_deg == pytest.approx(baseline.realized_stagger_deg + delta)

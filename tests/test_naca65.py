@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from cascade_forge.fitting_naca65 import fit_reference_geometry
-from cascade_forge.models_naca65 import NACA65Family, NACA65InputMode, NACA65Spec
-from cascade_forge.naca65 import generate_naca65, parse_naca65_designation
+from cascade_forge.domain.fitting_naca65 import fit_reference_geometry
+from cascade_forge.domain.models_naca65 import NACA65Family, NACA65InputMode, NACA65Spec
+from cascade_forge.domain.naca65 import generate_naca65, parse_naca65_designation
 
 
 @pytest.mark.parametrize(

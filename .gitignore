@@ -4,6 +4,14 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.playwright-cli/
+.pytest-temproot/
+.pytest-tmp/
+/dist/
+/build/
+/htmlcov/
+.coverage
+.coverage.*
 
 # Runtime data & outputs
 /databases/

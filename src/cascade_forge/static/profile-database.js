@@ -37,7 +37,7 @@
     function setExport(record) {
       selected = record; detail.hidden = !record; output.setReady(Boolean(record));
       root.querySelector("[data-library-id]").textContent = record ? record.geometry_id : "";
-      root.querySelector("[data-library-export-target]").textContent = record ? `当前导出样本：${record.name}` : "";
+      root.querySelector("[data-library-export-target]").textContent = record ? `当前导出样本：${record.label || record.name}` : "";
     }
     async function activate(item, keepComparison = false) {
       error.textContent = ""; activeId = item.geometry_id; activeItem = item;
@@ -55,11 +55,11 @@
       const slots = items.map(item => {
         const card = document.createElement("article"); card.className = "library-chart-card"; card.dataset.chartId = item.geometry_id;
         const heading = document.createElement("div"); heading.className = "library-chart-heading";
-        const title = document.createElement("h3"); title.textContent = `${item.name} · ${familyName[item.family] || item.family}`;
+        const title = document.createElement("h3"); title.textContent = item.label || `${item.name} · ${familyName[item.family] || item.family}`;
         const button = document.createElement("button"); button.type = "button"; button.className = "button"; button.textContent = "导出此样本";
         button.addEventListener("click", () => activate(item, true)); heading.append(title, button);
         const chart = document.createElement("div"); chart.className = "plotly-chart empty-chart"; chart.dataset.empty = "正在读取叶型…";
-        const id = document.createElement("code"); id.textContent = item.geometry_id; id.hidden = true;
+        const id = document.createElement("code"); id.textContent = item.geometry_id; id.className = "geometry-id";
         card.append(heading, chart, id); charts.append(card); return {item, card, chart, button};
       });
       syncSelection();
@@ -111,6 +111,25 @@
       }
       showPreview();
     }
+    async function deleteSample(item, button) {
+      const database = window.CFDatabase.name;
+      if (!window.confirm(`删除「${item.label || item.name}」？\n${item.geometry_id}\n仅移除数据库样本，原始坐标文件和历史设计保留。`)) return;
+      button.disabled = true;
+      try {
+        await window.CFOutput.request(`/api/workbench/profiles/${encodeURIComponent(item.geometry_id)}?database=${encodeURIComponent(database)}`, null, {method: "DELETE"});
+        if (database !== window.CFDatabase.name) return;
+        viewSequence++; sequence++;
+        comparison.delete(item.geometry_id); cache.delete(item.geometry_id);
+        if (activeId === item.geometry_id) {
+          activeItem = [...comparison.values()][0] || null; activeId = activeItem?.geometry_id || null;
+        }
+        setExport(null);
+        offset = Math.min(offset, Math.max(0, Math.ceil((total - 1) / 25) - 1) * 25);
+        await showPreview(); await load();
+        document.dispatchEvent(new CustomEvent("cf:profile-deleted", {detail: {geometry_id: item.geometry_id, database}}));
+      } catch (exc) {if (database === window.CFDatabase.name) error.textContent = exc.message;}
+      finally {button.disabled = false;}
+    }
     async function load() {
       const token = ++sequence; error.textContent = "";
       list.setAttribute("aria-busy", "true");
@@ -124,10 +143,15 @@
           const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.setAttribute("aria-label", `比较 ${item.name}`);
           checkbox.addEventListener("change", () => toggle(item, checkbox));
           const button = document.createElement("button"); button.type = "button"; button.className = "library-sample-button";
-          const name = document.createElement("strong"); name.textContent = item.name;
+          const name = document.createElement("strong"); name.textContent = item.label || item.name;
           const family = document.createElement("small"); family.textContent = familyName[item.family] || item.family;
-          const id = document.createElement("small"); id.textContent = item.geometry_id; id.hidden = true;
-          button.append(name, family, id); button.addEventListener("click", () => activate(item)); row.append(checkbox, button); list.append(row);
+          const id = document.createElement("small"); id.textContent = item.geometry_id; id.className = "geometry-id";
+          button.append(name, family, id); button.addEventListener("click", () => activate(item));
+          const remove = document.createElement("button"); remove.type = "button"; remove.className = "library-delete";
+          remove.dataset.deleteSample = item.geometry_id; remove.title = `删除 ${item.label || item.name}`; remove.setAttribute("aria-label", remove.title);
+          remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+          remove.addEventListener("click", () => deleteSample(item, remove));
+          row.append(checkbox, button, remove); list.append(row);
         }
         if (!result.items.length) {const empty = document.createElement("p"); empty.className = "field-help"; empty.textContent = "没有匹配叶型，可先生成并保存样本。"; list.append(empty);}
         root.querySelector("[data-library-count]").textContent = `共 ${total} 个叶型`;

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}数据库浏览{% endblock %}
-{% block extra_scripts %}<link rel="stylesheet" href="/static/profile-database.css?v=3"><script src="/static/profile-output.js?v=6" defer></script><script src="/static/profile-database.js?v=4" defer></script>{% endblock %}
+{% block extra_scripts %}<link rel="stylesheet" href="/static/profile-database.css?v=3.1-layered"><script src="/static/profile-output.js?v=3.1-layered" defer></script><script src="/static/profile-database.js?v=3.1-layered" defer></script>{% endblock %}
 {% block content %}
 <div class="library-workbench" data-profile-database>
   <aside class="surface-card library-sidebar" aria-label="叶型样本选择">
     {% include "partials/database-picker.html" %}
     <form class="library-filters" data-library-filters>
-      <label>名称 / ID 搜索<input type="search" name="search" maxlength="120"></label>
+      <label>标签 / 名称 / ID 搜索<input type="search" name="search" maxlength="120"></label>
       <label>叶型系列<select name="family"><option value="">全部</option><option value="custom">自定义</option><option value="naca65">NACA65</option><option value="double_arc">双圆弧</option><option value="imported">DAT 导入</option></select></label>
       <div class="button-row"><button class="button primary" type="submit">查询</button><button class="button" type="reset">重置</button></div>
     </form>
@@ -21,7 +21,7 @@
       <div class="card-heading"><div><h2 data-library-name>叶型预览</h2><p class="field-help" data-library-selection role="status">从左侧选择样本</p></div><button class="button" type="button" data-library-clear disabled>清空比较</button></div>
       <div class="library-preview-empty" data-library-empty>选择一个样本查看叶型，勾选 2–4 个样本并排比较。</div>
       <div class="library-comparison" data-library-charts></div>
-      <p class="field-help" data-library-id hidden></p>
+      <p class="field-help" data-library-id></p>
     </article>
     <section data-library-detail hidden>
       <p class="field-help" data-library-export-target></p>

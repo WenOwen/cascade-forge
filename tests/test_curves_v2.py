@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cascade_forge.curves import (
+from cascade_forge.domain.curves import (
     CurveEvaluator,
     open_uniform_knots,
     signed_curvature,
     unit_tangent_and_normal,
 )
-from cascade_forge.models_v2 import BSplineCurveSpec
+from cascade_forge.domain.models import BSplineCurveSpec
 
 
 def _curve() -> BSplineCurveSpec:

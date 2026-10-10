@@ -48,7 +48,7 @@
     });
     async function showRecord(record) {
         current = {family: record.family, spec: record.spec}; output.setReady(true); state.textContent = "已生成";
-        root.querySelector("[data-standard-name]").textContent = record.name;
+        root.querySelector("[data-standard-name]").textContent = record.label || record.name;
         root.querySelector("[data-standard-id]").textContent = record.geometry_id;
         const traces = ["suction", "pressure", "camber"].map((side, index) => ({
           x: record[side].map(p => p[0]), y: record[side].map(p => p[1]), mode: "lines", name: ["吸力面", "压力面", "中弧线"][index],

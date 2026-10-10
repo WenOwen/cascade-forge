@@ -7,10 +7,11 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from cascade_forge.database_folders import parse_dat
-from cascade_forge.models_naca65 import NACA65Spec
-from cascade_forge.profile_library import coordinate_text, generate_record
-from cascade_forge.web import create_app
+from cascade_forge.api.app import create_app
+from cascade_forge.domain.coordinates import coordinate_text
+from cascade_forge.domain.models_naca65 import NACA65Spec
+from cascade_forge.storage.database_folders import parse_dat
+from cascade_forge.workbench.generator import generate_record
 
 
 @pytest.fixture()
@@ -19,8 +20,11 @@ def client(tmp_path):
 
 
 def native_request(database="默认数据库"):
-    return {"database": database, "family": "naca65",
-            "spec": NACA65Spec(family="65-compressor").model_dump(mode="json")}
+    return {
+        "database": database,
+        "family": "naca65",
+        "spec": NACA65Spec(family="65-compressor").model_dump(mode="json"),
+    }
 
 
 def test_named_databases_are_isolated_and_save_coordinate_files(client):
@@ -42,9 +46,19 @@ def test_named_databases_are_isolated_and_save_coordinate_files(client):
     assert len(scan["skipped"]) == 1 and not scan["imported"] and not scan["errors"]
 
 
-@pytest.mark.parametrize("name", [
-    "", "..", "../outside", "x/y", "x\\y", "CON", "AUX.txt", "bad?", "历史生成数据",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "",
+        "..",
+        "../outside",
+        "x/y",
+        "x\\y",
+        "CON",
+        "AUX.txt",
+        "bad?",
+    ],
+)
 def test_invalid_database_names_are_rejected(client, name):
     assert client.post("/api/workbench/databases", json={"name": name}).status_code == 422
 
@@ -62,8 +76,11 @@ def test_dat_drop_scan_preview_and_reimport_preserve_coordinates(client):
     assert restored["family"] == "imported" and restored["name"] == "用户叶型"
     assert restored["spec"] == {}
     exported = client.get(f"/api/workbench/profiles/{identifier}/export/dat")
-    np.testing.assert_allclose(np.loadtxt(io.StringIO(exported.text), skiprows=1),
-                               np.loadtxt(io.StringIO(original.decode()), skiprows=1), atol=1e-15)
+    np.testing.assert_allclose(
+        np.loadtxt(io.StringIO(exported.text), skiprows=1),
+        np.loadtxt(io.StringIO(original.decode()), skiprows=1),
+        atol=1e-15,
+    )
     assert path.read_bytes() == original
     client.post("/api/workbench/databases/默认数据库/scan")
     assert client.get("/api/workbench/profiles?family=imported").json()["total"] == 1
@@ -98,9 +115,23 @@ def test_imported_dat_never_guesses_dimensional_placement(client):
     record = generate_record("naca65", native_request()["spec"])
     (directory / "sample.dat").write_text(coordinate_text(record, "dat"), encoding="utf-8")
     identifier = client.post("/api/workbench/databases/默认数据库/scan").json()["imported"][0]
-    response = client.post("/api/workbench/geomturbo", json={"name": "blade", "blade_count": 12,
-        "sections": [{"geometry_id": identifier, "span_fraction": i, "radius_m": 0.2 + 0.1 * i,
-                      "chord_m": 0.05, "stagger_deg": 0} for i in range(2)]})
+    response = client.post(
+        "/api/workbench/geomturbo",
+        json={
+            "name": "blade",
+            "blade_count": 12,
+            "sections": [
+                {
+                    "geometry_id": identifier,
+                    "span_fraction": i,
+                    "radius_m": 0.2 + 0.1 * i,
+                    "chord_m": 0.05,
+                    "stagger_deg": 0,
+                }
+                for i in range(2)
+            ],
+        },
+    )
     assert response.status_code == 422
 
 
@@ -108,8 +139,10 @@ def test_closed_xyz_dat_and_nonplanar_rejection(tmp_path):
     record = generate_record("naca65", native_request()["spec"])
     lines = coordinate_text(record, "dat").splitlines()[1:]
     path = tmp_path / "igg.dat"
-    path.write_text("curve\nXYZ\n" + str(len(lines)) + "\n" +
-                    "\n".join(line + " 0" for line in lines), encoding="utf-8")
+    path.write_text(
+        "curve\nXYZ\n" + str(len(lines)) + "\n" + "\n".join(line + " 0" for line in lines),
+        encoding="utf-8",
+    )
     assert parse_dat(path)["family"] == "imported"
     path.write_text(path.read_text(encoding="utf-8").replace(" 0\n", " 1\n", 1), encoding="utf-8")
     with pytest.raises(ValueError, match="Z 坐标"):

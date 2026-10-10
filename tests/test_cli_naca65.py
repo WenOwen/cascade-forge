@@ -4,10 +4,10 @@ import json
 
 from typer.testing import CliRunner
 
-from cascade_forge.benchmark_naca65 import run_naca65_benchmark
 from cascade_forge.cli import app
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig
-from cascade_forge.storage_naca65 import NACA65BenchmarkStore
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig
+from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+from cascade_forge.workbench.benchmark_naca65 import run_naca65_benchmark
 
 
 def test_naca65_cli_generate_and_fit(tmp_path) -> None:
@@ -73,6 +73,4 @@ def test_naca65_cli_export(tmp_path) -> None:
         ],
     )
     assert result.exit_code == 0, result.stdout
-    assert destination.read_text(encoding="utf-8").startswith(
-        "source,side,point,x_over_c,y_over_c"
-    )
+    assert destination.read_text(encoding="utf-8").startswith("source,side,point,x_over_c,y_over_c")

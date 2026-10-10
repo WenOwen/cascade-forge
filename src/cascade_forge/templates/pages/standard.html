@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}标准叶型 · Cascade Forge{% endblock %}
 {% block page_title %}标准叶型{% endblock %}
-{% block extra_scripts %}<script src="/static/profile-output.js?v=6" defer></script><script src="/static/standard.js?v=2" defer></script>{% endblock %}
+{% block extra_scripts %}<script src="/static/profile-output.js?v=3.1-layered" defer></script><script src="/static/standard.js?v=3.1-layered" defer></script>{% endblock %}
 {% block content %}
 <div data-standard-root data-default-arc='{{ default_arc_spec|tojson }}'>
   <div class="segmented" role="group" aria-label="标准叶型系列"><button class="active" type="button" data-standard-family="naca65">NACA65 系列</button><button type="button" data-standard-family="double_arc">双圆弧系列</button></div>
@@ -28,7 +28,7 @@
       <button class="button primary" type="submit">生成叶型</button><p data-standard-error role="alert"></p>
     </form></aside>
     <section class="studio-main">
-      <article class="surface-card canvas-card"><div class="card-heading"><h2 data-standard-name>叶型预览</h2><span class="pill" data-standard-state>尚未生成</span></div><div id="standard-chart" class="plotly-chart profile-frame empty-chart" data-empty="调整参数，点击生成叶型"></div><p class="field-help" data-standard-id hidden></p></article>
+      <article class="surface-card canvas-card"><div class="card-heading"><h2 data-standard-name>叶型预览</h2><span class="pill" data-standard-state>尚未生成</span></div><div id="standard-chart" class="plotly-chart profile-frame empty-chart" data-empty="调整参数，点击生成叶型"></div><p class="field-help" data-standard-id></p></article>
     </section>
     {% include "partials/profile-rail.html" %}
   </section>

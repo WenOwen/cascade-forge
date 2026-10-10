@@ -1,6 +1,0 @@
-{% extends "base.html" %}
-{% block page_title %}审计{% endblock %}
-{% block toolbar_actions %}<button class="button primary" type="button" data-run-audit>运行完整审计</button>{% endblock %}
-{% block content %}
-<section class="surface-card" data-audit-root><div class="audit-hero"><div><span class="audit-ring" data-audit-ring>—</span></div><div><p class="eyebrow">DATASET INTEGRITY</p><h2 data-audit-title>等待审计</h2><p class="muted" data-audit-subtitle>检查配额、唯一 ID、定长坐标、几何门槛、文件哈希和确定性重建。</p></div></div><div class="audit-grid" data-audit-checks></div><details><summary>原始审计 JSON</summary><pre data-audit-json>{}</pre></details></section>
-{% endblock %}

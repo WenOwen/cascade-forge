@@ -2,9 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
-fs.mkdirSync('UDF/output', {recursive: true});
+fs.mkdirSync('output/playwright', {recursive: true});
 (async () => {
-  const browser = await chromium.launch({headless: true});
+  const browser = await chromium.launch({headless: true, executablePath: process.env.CF_CHROMIUM});
   try {
     const page = await browser.newPage({viewport: {width: 1600, height: 1100}}), errors = [];
     let payload;
@@ -30,7 +30,7 @@ fs.mkdirSync('UDF/output', {recursive: true});
     assert.deepEqual(gradient.shapes, []);
     assert.match(await page.locator('[data-analysis-help]').textContent(), /不设固定曲率或梯度上限/);
     assert.match(await page.locator('[data-analysis-summary]').textContent(), /内部峰值/);
-    await page.screenshot({path: 'UDF/output/geometry-diagnostics-no-limit.png', fullPage: true});
+    await page.screenshot({path: 'output/playwright/geometry-diagnostics-no-limit.png', fullPage: true});
     await page.locator('[data-analysis-interior]').uncheck();
     await page.waitForFunction(length => document.querySelector('#analysis-chart')._fullData[0].x.length === length, payload.analysis.suction_s.length);
     await page.locator('[data-analysis=curvature]').click();

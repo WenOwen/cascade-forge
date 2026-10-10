@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 
-from cascade_forge.features import extract_features
-from cascade_forge.geometry2d import generate_profile
-from cascade_forge.models_v2 import GeometryIntentV2, GeometrySpecV2
-from cascade_forge.storage_v2 import DatasetStoreV2
-from cascade_forge.validation import validate_profile
-from cascade_forge.workspace import WorkspaceStore
+from cascade_forge.domain.features import extract_features
+from cascade_forge.domain.geometry import generate_profile
+from cascade_forge.domain.models import GeometryIntentV2, GeometrySpecV2
+from cascade_forge.domain.validation import validate_profile
+from cascade_forge.storage.dataset import DatasetStoreV2
+from cascade_forge.storage.workspace import WorkspaceStore
 
 
 def _geometry():

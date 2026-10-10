@@ -5,13 +5,17 @@ import time
 import numpy as np
 from fastapi.testclient import TestClient
 
-from cascade_forge.features import extract_features
-from cascade_forge.geometry2d import generate_profile
-from cascade_forge.models import SectionDefinition, SectionSchedule
-from cascade_forge.models_v2 import GeometryIntentV2, GeometrySpecV2
-from cascade_forge.storage_v2 import DatasetStoreV2
-from cascade_forge.validation import validate_profile
-from cascade_forge.web import create_app
+from cascade_forge.api.app import create_app
+from cascade_forge.domain.features import extract_features
+from cascade_forge.domain.geometry import generate_profile
+from cascade_forge.domain.models import (
+    GeometryIntentV2,
+    GeometrySpecV2,
+    SectionDefinition,
+    SectionSchedule,
+)
+from cascade_forge.domain.validation import validate_profile
+from cascade_forge.storage.dataset import DatasetStoreV2
 
 
 def _seed_v2(path):
@@ -50,12 +54,11 @@ def _wait(client: TestClient, job_id: str) -> dict:
 
 
 def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
-    v1_root = tmp_path / "v1"
     v2_root = tmp_path / "v2"
     workspace = tmp_path / "workspace"
     geometry = _seed_v2(v2_root)
     with TestClient(
-        create_app(v1_root, v2_dataset_root=v2_root, workspace_root=workspace)
+        create_app(v2_root, workspace_root=workspace, profile_database_root=tmp_path / "databases")
     ) as client:
         spec = GeometrySpecV2(intent=geometry.spec.intent)
         preview = client.post("/api/v2/preview", json=spec.model_dump(mode="json"))
@@ -82,13 +85,9 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         ).json()
         assert moved["geometry"]["geometry_id"] == payload["geometry"]["geometry_id"]
         assert moved["geometry"]["intent_id"] == payload["geometry"]["intent_id"]
-        np.testing.assert_array_equal(
-            moved["geometry"]["suction"], payload["geometry"]["suction"]
-        )
+        np.testing.assert_array_equal(moved["geometry"]["suction"], payload["geometry"]["suction"])
         delta = np.radians(8.0)
-        rotation = np.array(
-            [[np.cos(delta), -np.sin(delta)], [np.sin(delta), np.cos(delta)]]
-        )
+        rotation = np.array([[np.cos(delta), -np.sin(delta)], [np.sin(delta), np.cos(delta)]])
         np.testing.assert_allclose(
             moved["placement"]["suction"],
             np.asarray(payload["placement"]["suction"]) @ rotation.T,
@@ -131,8 +130,7 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
         imported = client.post("/api/v2/workspace/import", json=exported.json())
         assert imported.status_code == 201
         fits = client.get("/api/v2/anchor-fits")
-        assert fits.status_code == 200
-        assert fits.json()["total"] == 0
+        assert fits.status_code == 404
 
         studio = client.get("/studio")
         assert studio.status_code == 200
@@ -145,7 +143,6 @@ def test_v2_preview_database_compare_cascade_and_workspace(tmp_path) -> None:
 
 
 def test_v2_blade_job_and_artifact_download(tmp_path) -> None:
-    v1_root = tmp_path / "v1"
     v2_root = tmp_path / "v2"
     geometry = _seed_v2(v2_root)
     schedule = SectionSchedule(
@@ -168,7 +165,7 @@ def test_v2_blade_job_and_artifact_download(tmp_path) -> None:
             ),
         ],
     )
-    with TestClient(create_app(v1_root, v2_dataset_root=v2_root)) as client:
+    with TestClient(create_app(v2_root, profile_database_root=tmp_path / "databases")) as client:
         preview = client.post("/api/v2/blades/preview", json=schedule.model_dump(mode="json"))
         assert preview.status_code == 200
         assert len(preview.json()["sections"]) == 2

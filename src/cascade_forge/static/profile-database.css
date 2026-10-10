@@ -6,7 +6,7 @@
 .library-error { color: var(--danger); overflow-wrap: anywhere; margin: 0 0 10px; }
 .library-error:empty { display: none; }
 .library-samples { min-height: 140px; overflow-y: auto; overscroll-behavior: contain; flex: 1; display: grid; align-content: start; gap: 8px; padding: 2px 5px 2px 2px; scrollbar-gutter: stable; }
-.library-sample { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 6px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--surface); padding: 9px; }
+.library-sample { display: grid; grid-template-columns: 22px minmax(0, 1fr) 32px; align-items: center; gap: 6px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--surface); padding: 9px; }
 .library-sample.active { border-color: var(--blue); background: #f2f7fd; }
 .library-sample.checked { box-shadow: inset 3px 0 var(--blue); }
 .library-sample input { width: 16px; height: 16px; margin: 0; accent-color: var(--blue); }
@@ -33,3 +33,9 @@
 @media (max-width: 1100px) { .library-workbench { grid-template-columns: 260px minmax(0, 1fr); } .library-comparison.multiple .plotly-chart { height: 240px; } }
 @media (max-width: 900px) { .library-workbench { grid-template-columns: 1fr; } .library-sidebar { position: static; max-height: none; } .library-samples { max-height: 280px; } }
 @media (max-width: 600px) { .library-comparison.multiple { grid-template-columns: 1fr; } .library-chart-card .plotly-chart { height: 280px; } }
+
+.library-delete { display: grid; place-items: center; width: 32px; height: 36px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.library-delete:hover { background: #fff0ef; color: var(--danger); }
+.library-delete:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.library-delete:disabled { opacity: .4; cursor: wait; }
+.geometry-id { display: block; overflow-wrap: anywhere; font: 11px ui-monospace, Consolas, monospace; color: var(--muted); }

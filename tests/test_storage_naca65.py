@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from cascade_forge.benchmark_naca65 import benchmark_specs, run_naca65_benchmark
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig
-from cascade_forge.storage_naca65 import NACA65BenchmarkStore
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig
+from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+from cascade_forge.workbench.benchmark_naca65 import benchmark_specs, run_naca65_benchmark
 
 
 def _small_config() -> NACA65BenchmarkConfig:

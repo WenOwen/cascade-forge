@@ -3,15 +3,15 @@ const assert = require('node:assert/strict');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
 (async () => {
-  const browser = await chromium.launch({headless: true});
+  const browser = await chromium.launch({headless: true, executablePath: process.env.CF_CHROMIUM});
   try {
     const page = await browser.newPage({viewport: {width: 1440, height: 1000}}), errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const native = await (await page.request.post(`${base}/api/workbench/preview`, {data: {family: 'naca65', spec: {family: '65-compressor', thickness_ratio: .1, design_lift_coefficient: .8, loading_parameter_a: 1}}})).json();
-    let record = {...native, geometry_id: 'dat_fixture_v1', name: '外部 DAT 样例', family: 'imported', spec: {}, camber: [], suction: native.suction.map(point => point.map(value => value * 5)), pressure: native.pressure.map(point => point.map(value => value * 5))};
+    let record = {...native, geometry_id: 'dat_fixture_v1', name: '外部 DAT 样例', label: '外部 DAT 样例', family: 'imported', spec: {}, camber: [], suction: native.suction.map(point => point.map(value => value * 5)), pressure: native.pressure.map(point => point.map(value => value * 5))};
     await page.route('**/api/workbench/databases**', async route => {
       if (route.request().url().endsWith('/scan')) {
-        record = {...record, geometry_id: 'dat_fixture_v2', name: '已更新 DAT 样例'};
+        record = {...record, geometry_id: 'dat_fixture_v2', name: '已更新 DAT 样例', label: '已更新 DAT 样例'};
         return route.fulfill({json: {imported: [record.geometry_id], skipped: [], errors: []}});
       }
       return route.fulfill({json: {root: 'test/databases', default: '默认数据库', items: [{name: '默认数据库', path: 'test/databases/默认数据库'}, {name: '空数据库', path: 'test/databases/空数据库'}]}});

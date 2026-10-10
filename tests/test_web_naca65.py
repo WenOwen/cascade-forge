@@ -4,8 +4,8 @@ import time
 
 from fastapi.testclient import TestClient
 
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig, NACA65Spec
-from cascade_forge.web import create_app
+from cascade_forge.api.app import create_app
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig, NACA65Spec
 
 
 def _wait(client: TestClient, job_id: str) -> dict:
@@ -24,8 +24,7 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
     benchmark_root = tmp_path / "naca65"
     with TestClient(
         create_app(
-            tmp_path / "v1",
-            v2_dataset_root=tmp_path / "v2",
+            tmp_path / "v2",
             naca65_dataset_root=benchmark_root,
         )
     ) as client:
@@ -35,11 +34,9 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
         assert "naca65.js" in page.text
         assert "法向分解校验" in page.text
         assert "data-naca-normals" in page.text
-        assert "data-invariant=\"midpoint_error_max\"" in page.text
+        assert 'data-invariant="midpoint_error_max"' in page.text
 
-        parsed = client.post(
-            "/api/v2/naca65/presets/parse", json={"designation": "65-(12)10"}
-        )
+        parsed = client.post("/api/v2/naca65/presets/parse", json={"designation": "65-(12)10"})
         assert parsed.status_code == 200
         assert parsed.json()["spec"]["design_lift_coefficient"] == 1.2
         assert parsed.json()["spec"]["thickness_ratio"] == 0.1
@@ -70,9 +67,7 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
             max_outer_iterations=1,
             max_design_evaluations=10,
         )
-        started = client.post(
-            "/api/v2/naca65/benchmarks", json=config.model_dump(mode="json")
-        )
+        started = client.post("/api/v2/naca65/benchmarks", json=config.model_dump(mode="json"))
         assert started.status_code == 202
         job = _wait(client, started.json()["job_id"])
         assert job["status"] == "completed", job
@@ -94,5 +89,5 @@ def test_naca65_generate_fit_benchmark_and_exports(tmp_path) -> None:
         assert manifest.status_code == 200
         assert manifest.json()["total_cases"] == 2
         assert manifest.json()["benchmark_version"] == "naca65-benchmark-3.0.0"
-        jobs = client.get("/api/v2/jobs").json()["items"]
-        assert any(item["job_id"] == job["job_id"] for item in jobs)
+        assert client.get("/api/v2/jobs").status_code == 404
+        assert client.get(f"/api/v2/jobs/{job['job_id']}").json()["status"] == "completed"

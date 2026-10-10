@@ -1,12 +1,14 @@
 from fastapi.testclient import TestClient
 from test_web_v2 import _seed_v2
 
-from cascade_forge.web import create_app
+from cascade_forge.api.app import create_app
 
 
 def test_database_filter_totals_search_and_pagination(tmp_path):
     geometry = _seed_v2(tmp_path / "v2")
-    with TestClient(create_app(tmp_path / "v1", v2_dataset_root=tmp_path / "v2")) as client:
+    with TestClient(
+        create_app(tmp_path / "v2", profile_database_root=tmp_path / "databases")
+    ) as client:
         for filters, expected in [
             ({}, 1),
             ({"status": "valid"}, 1),

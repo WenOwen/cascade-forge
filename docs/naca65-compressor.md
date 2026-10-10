@@ -11,7 +11,7 @@
 - 接点达到 **G1 相切连续**，曲率可以跳变，不宣称 G2。圆整后的坐标不是历史试验叶片的精确复刻；1% / 2% 弦长大圆尾缘试验变体也不在本版范围内。
 - `raw_suction/raw_pressure` 保留圆整前的表格构造；`normalized_suction/normalized_pressure` 是包含光顺与圆弧的完整闭合轮廓。弦长归一化以名义中弧线端点为基准，不按曲面最小/最大 x 再归一化。
 
-来源：[TR 1368 表 I](https://digital.library.unt.edu/ark:/67531/metadc60788/m1/6/)、[NASA RM L51G31](https://ntrs.nasa.gov/citations/19930093730)、[尾缘半径试验 RM L51J16](https://ntrs.nasa.gov/citations/19930086925)。表格数值保存在 `src/cascade_forge/compressor_naca65.py`，无需联网生成。
+来源：[TR 1368 表 I](https://digital.library.unt.edu/ark:/67531/metadc60788/m1/6/)、[NASA RM L51G31](https://ntrs.nasa.gov/citations/19930093730)、[尾缘半径试验 RM L51J16](https://ntrs.nasa.gov/citations/19930086925)。表格数值保存在 `src/cascade_forge/domain/compressor_naca65.py`，无需联网生成。
 
 ## 拟合、显示与导出
 
@@ -19,7 +19,7 @@
 
 完整轮廓距离、自交检查、CSV/Parquet 导出均包含圆尾缘。JSON 还保存圆弧、圆心、接点、原始表格构造与来源。尾缘图默认放大到半径量级；法向连线只绘制 95% 弦长之前的主体站位。
 
-在 `UDF` 目录运行：
+在项目根目录运行：
 
 ```powershell
 .venv/Scripts/python.exe -m cascade_forge.cli naca65 generate --preset 65-810 --destination output/naca65-compressor/native.json

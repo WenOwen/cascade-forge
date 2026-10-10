@@ -26,7 +26,7 @@
         next = workspace ? data.items.length > pageSize : offset + pageSize < data.total; list.replaceChildren();
         for (const item of data.items.slice(0, pageSize)) {
           const card = document.createElement("article"); card.className = "rail-saved-card";
-          const name = document.createElement("strong"); name.textContent = item.name;
+          const name = document.createElement("strong"); name.textContent = item.label || item.name;
           const id = document.createElement("small"); id.textContent = workspace ? `修订 ${item.revision}` : ({custom: "自定义叶型", naca65: "NACA65", double_arc: "双圆弧", imported: "DAT 导入"}[item.family] || "已保存截面");
           const button = document.createElement("button"); button.type = "button"; button.className = "button"; button.textContent = "打开叶型";
           button.addEventListener("click", async () => {
@@ -39,7 +39,7 @@
               if (opened !== false) switchTab("actions");
             } catch (error) {status.textContent = error.message;} finally {button.disabled = false;}
           });
-          card.append(name, id, button); list.append(card);
+          const identifier = document.createElement("code"); identifier.className = "geometry-id"; identifier.textContent = item.geometry_id; card.append(name, id, identifier, button); list.append(card);
         }
         status.textContent = data.items.length ? "点击样本可继续编辑或导出。" : "暂无保存记录。";
         root.querySelector("[data-rail-page]").textContent = `第 ${offset / pageSize + 1} 页`;
@@ -55,7 +55,7 @@
       root.querySelector("[data-rail-history-source]").open = true;
       switchTab("saved", true);
     });
-    ["cf:design-saved", "cf:profile-saved", "cf:database-changed", "cf:database-scanned", "cf:standard-family"].forEach(name => document.addEventListener(name, () => {token++; offset = 0; if (source && ["cf:profile-saved", "cf:database-changed", "cf:database-scanned"].includes(name)) source.value = "dataset"; if (active === "saved") load();}));
+    ["cf:design-saved", "cf:profile-saved", "cf:profile-deleted", "cf:database-changed", "cf:database-scanned", "cf:standard-family"].forEach(name => document.addEventListener(name, () => {token++; offset = 0; if (source && ["cf:profile-saved", "cf:profile-deleted", "cf:database-changed", "cf:database-scanned"].includes(name)) source.value = "dataset"; if (active === "saved") load();}));
     if (source && new URLSearchParams(location.search).get("open") === "workspace") {source.value = "workspace"; root.querySelector("[data-rail-history-source]").open = true; switchTab("saved");}
   });
 })();

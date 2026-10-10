@@ -1,6 +1,6 @@
 # 圆弧族叶型：单圆弧 CA、双圆弧 DCA 与多圆弧 MCA
 
-> 本文是 `src/cascade_forge/circular_arc.py` 与 `models_circular_arc.py` 的数学合同。
+> 本文是 `src/cascade_forge/domain/circular_arc.py` 与 `models_circular_arc.py` 的数学合同。
 > 任何与实现不一致的描述都算缺陷，应当以本文修正实现或以实现修正本文。
 > 坐标约定：弦线局部坐标，前缘 `(0, 0)`，尾缘 `(1, 0)`，`y > 0` 指向吸力面。
 
@@ -451,7 +451,7 @@ geometry.diagnostics      # 全部不变量
 ### CLI
 
 ```powershell
-cd UDF
+# 在项目根目录运行
 .\.venv\Scripts\python.exe -m cascade_forge.cli arc generate --family double `
     --inlet-metal-angle-deg 30 --outlet-metal-angle-deg 20 `
     --destination output/arc-dca.json

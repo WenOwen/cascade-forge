@@ -4,7 +4,7 @@
   const ready = new Promise(resolve => {resolveReady = resolve;});
   const api = window.CFDatabase = {
     ready, get name() {return name;},
-    query(url) {const result = new URL(url, location.origin); result.searchParams.set("database", name); return result.pathname + result.search;},
+    query(url) {const result = new URL(url, location.origin); if (!result.searchParams.has("database")) result.searchParams.set("database", name); return result.pathname + result.search;},
     body(body) {return {...body, database: name};}
   };
   document.addEventListener("DOMContentLoaded", async () => {

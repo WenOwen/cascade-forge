@@ -1,4 +1,4 @@
-schema_version: "2.1.0"
+schema_version: 2.1.0
 capabilities:
   generate_profile:
     ui: /studio
@@ -15,40 +15,24 @@ capabilities:
   workspace_save_import_export:
     ui: /studio
     api: POST /api/v2/workspace/designs
-    cli: workspace-list, workspace-import, workspace-export
   database_query_export:
     ui: /database
-    api: GET /api/v2/geometries
-    cli: export
+    api: GET /api/workbench/profiles
   compare_profiles:
     ui: /compare
     api: POST /api/v2/compare
   validate_cascade:
     ui: /cascade
     api: POST /api/v2/cascade
-  fit_anchors:
-    ui: /anchors
-    api: POST /api/v2/anchor-fits
-    cli: fit-anchors
   build_blade:
     ui: /blade
     api: POST /api/v2/blades
-    cli: build-blade
   export_geomturbo:
     ui: /blade
     api: GET /api/v2/artifacts/{artifact_path}
-    cli: build-blade
-  generate_dataset:
-    ui: /datasets
-    api: POST /api/v2/batches
-    cli: generate
-  audit_dataset:
-    ui: /audit
-    api: GET /api/v2/audit
-    cli: audit
   jobs_and_artifacts:
-    ui: /jobs
-    api: GET /api/v2/jobs
+    ui: /blade
+    api: GET /api/v2/jobs/{job_id}
   generate_naca65:
     ui: /naca65
     api: POST /api/v2/naca65/generate
@@ -65,3 +49,13 @@ capabilities:
     ui: /naca65
     api: GET /api/v2/naca65/cases/{fit_id}/export
     cli: naca65 export
+  delete_database_sample:
+    ui: /database
+    api: DELETE /api/workbench/profiles/{identifier}
+  profile_parameter_sweep:
+    ui: /standard
+    api: POST /api/workbench/batches
+  generate_arc:
+    ui: /arc
+    api: POST /api/v2/arc/generate
+    cli: arc generate

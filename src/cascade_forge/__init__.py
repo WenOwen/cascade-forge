@@ -1,8 +1,7 @@
 """Cascade Forge public API."""
 
-from .benchmark_naca65 import run_naca65_benchmark
-from .blade3d import build_blade
-from .circular_arc import (
+from cascade_forge.domain.blade3d import build_blade
+from cascade_forge.domain.circular_arc import (
     CircularArc,
     CircularArcChain,
     ThicknessLawInfeasible,
@@ -19,17 +18,20 @@ from .circular_arc import (
     maximum_feasible_half_wedge_deg,
     trailing_edge_half_wedges_deg,
 )
-from .features import extract_features
-from .fitting_naca65 import evaluate_reference_fit, fit_reference_geometry
-from .fitting_v2 import (
-    fit_anchor_geometry,
-    fit_anchors_to_dataset,
-    fit_legacy_anchors,
+from cascade_forge.domain.features import extract_features
+from cascade_forge.domain.fitting_naca65 import evaluate_reference_fit, fit_reference_geometry
+from cascade_forge.domain.geometry import generate_profile
+from cascade_forge.domain.geomturbo import export_geomturbo
+from cascade_forge.domain.models import (
+    AirfoilGeometryV2,
+    BSplineCurveSpec,
+    EdgeSpec,
+    GeometryFeaturesV2,
+    GeometryIntentV2,
+    GeometrySpecV2,
+    MetalAngleReference,
 )
-from .geometry2d import generate_profile
-from .geomturbo import export_geomturbo
-from .legacy import ingest_legacy_anchors
-from .models_circular_arc import (
+from cascade_forge.domain.models_circular_arc import (
     ARC_ALGORITHM_VERSION,
     ArcFamily,
     ArcMeanLineSpec,
@@ -39,7 +41,7 @@ from .models_circular_arc import (
     build_designation,
     build_mca_mean_line,
 )
-from .models_naca65 import (
+from cascade_forge.domain.models_naca65 import (
     NACA65BenchmarkConfig,
     NACA65BenchmarkManifest,
     NACA65CamberCurveSpec,
@@ -51,23 +53,13 @@ from .models_naca65 import (
     NACA65Spec,
     NACA65SplineSpec,
 )
-from .models_v2 import (
-    AirfoilGeometryV2,
-    AnchorFitRecord,
-    BSplineCurveSpec,
-    EdgeSpec,
-    GeometryFeaturesV2,
-    GeometryIntentV2,
-    GeometrySpecV2,
-    MetalAngleReference,
-)
-from .naca65 import generate_naca65, parse_naca65_designation
-from .normal_bspline import generate_normal_offset_profile
-from .sampling import generate_dataset
-from .storage_naca65 import NACA65BenchmarkStore
-from .storage_v2 import DatasetStoreV2
-from .validation import validate_profile
-from .workspace import WorkspaceStore
+from cascade_forge.domain.naca65 import generate_naca65, parse_naca65_designation
+from cascade_forge.domain.normal_bspline import generate_normal_offset_profile
+from cascade_forge.domain.validation import validate_profile
+from cascade_forge.storage.dataset import DatasetStoreV2
+from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+from cascade_forge.storage.workspace import WorkspaceStore
+from cascade_forge.workbench.benchmark_naca65 import run_naca65_benchmark
 
 __all__ = [
     "build_blade",
@@ -89,20 +81,14 @@ __all__ = [
     "run_naca65_benchmark",
     "export_geomturbo",
     "extract_features",
-    "fit_anchor_geometry",
-    "fit_anchors_to_dataset",
-    "fit_legacy_anchors",
     "fit_reference_geometry",
     "evaluate_reference_fit",
-    "generate_dataset",
     "generate_profile",
-    "ingest_legacy_anchors",
     "validate_profile",
     "DatasetStoreV2",
     "NACA65BenchmarkStore",
     "WorkspaceStore",
     "AirfoilGeometryV2",
-    "AnchorFitRecord",
     "ArcFamily",
     "ArcMeanLineSpec",
     "ArcProfileGeometry",

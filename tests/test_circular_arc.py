@@ -11,8 +11,8 @@ import math
 import numpy as np
 import pytest
 
-import cascade_forge.circular_arc as arc_kernel
-from cascade_forge.circular_arc import (
+import cascade_forge.domain.circular_arc as arc_kernel
+from cascade_forge.domain.circular_arc import (
     ThicknessLawInfeasible,
     aft_end_slope_for_wedge,
     build_arc_chain,
@@ -31,7 +31,7 @@ from cascade_forge.circular_arc import (
     surface_curvature,
     trailing_edge_half_wedges_deg,
 )
-from cascade_forge.models_circular_arc import (
+from cascade_forge.domain.models_circular_arc import (
     ArcFamily,
     ArcMeanLineSpec,
     ArcProfileSpec,
@@ -81,9 +81,7 @@ def _circumradius(chain, law, station: float) -> float:
         float(np.linalg.norm(points[2] - points[0])),
     ]
     semi = 0.5 * sum(sides)
-    area = math.sqrt(
-        max(semi * (semi - sides[0]) * (semi - sides[1]) * (semi - sides[2]), 0.0)
-    )
+    area = math.sqrt(max(semi * (semi - sides[0]) * (semi - sides[1]) * (semi - sides[2]), 0.0))
     return sides[0] * sides[1] * sides[2] / (4.0 * area)
 
 
@@ -157,9 +155,7 @@ def test_double_arc_nodes_are_close_form_of_the_linear_closure():
     tan1, tan2 = math.tan(0.5 * phi0), math.tan(0.5 * phi2)
     expected_x = tan2 / (tan2 - tan1)
     assert chain.node_points[1, 0] == pytest.approx(expected_x, abs=1e-14)
-    assert chain.node_points[1, 1] == pytest.approx(
-        expected_x * math.tan(0.5 * phi0), abs=1e-14
-    )
+    assert chain.node_points[1, 1] == pytest.approx(expected_x * math.tan(0.5 * phi0), abs=1e-14)
 
 
 def test_each_arc_endpoint_tangent_matches_the_node_angle_exactly():
@@ -286,10 +282,9 @@ def test_junction_station_closure_hits_the_requested_station():
         chain = build_arc_chain(spec.mean_line)
         assert chain.node_points[1, 0] == pytest.approx(station, abs=1e-12)
         # 切点站位与切点切线角互为单调可逆映射
-        recovered = solve_junction_angle_for_station(
-            38.0, 17.0, float(chain.node_points[1, 0])
-        )
+        recovered = solve_junction_angle_for_station(38.0, 17.0, float(chain.node_points[1, 0]))
         assert recovered == pytest.approx(float(chain.node_angles[1]) * 180 / math.pi, abs=1e-9)
+
 
 @pytest.mark.parametrize("inlet,outlet", [(30.0, 20.0), (45.0, 12.0), (12.0, 45.0), (25.0, 25.0)])
 def test_junction_angle_for_station_spans_the_reachable_range(inlet, outlet):
@@ -376,7 +371,7 @@ def test_junction_station_lies_strictly_between_the_attainable_bounds():
 
 
 def _span_limit(phi0: float, phi2: float, middle: float) -> float:
-    from cascade_forge.circular_arc import double_arc_first_span
+    from cascade_forge.domain.circular_arc import double_arc_first_span
 
     return double_arc_first_span(phi0, phi2, middle)
 
@@ -444,7 +439,7 @@ def test_multiple_arc_mca_closes_for_the_full_profile(count):
     # 独立测量：把生成折线按相邻段的夹角重新做一次自交检测。
     # （``diagnostics["self_intersection"]`` 在生产代码里被硬编码成 0.0，断言它
     # 等于 0.0 永远是 True——它记录的是「装配没抛错」这个事实，不是测量结果。）
-    from cascade_forge.circular_arc import has_self_intersection
+    from cascade_forge.domain.circular_arc import has_self_intersection
 
     suction = np.asarray(geometry.suction)
     pressure = np.asarray(geometry.pressure)
@@ -549,9 +544,7 @@ def test_thickness_law_hits_its_contract_values():
     # 末端斜率必须由五次 Hermite 真正实现（比较多项式求值与构造时钉入的端点条件，
     # 而不是再调用一次反解函数——那才是同义反复）。楔角与斜率的换算含 L 与 hκ，
     # 独立的几何验证见 test_trailing_edge_wedge_is_realized_exactly。
-    assert float(law.derivative(np.array([1.0]))[0]) == pytest.approx(
-        law.aft_end_slope, rel=1e-12
-    )
+    assert float(law.derivative(np.array([1.0]))[0]) == pytest.approx(law.aft_end_slope, rel=1e-12)
     assert law.aft_end_slope < 0.0
 
 
@@ -649,9 +642,7 @@ def test_leading_edge_radius_shrinks_by_the_arc_length_factor():
         nose = np.asarray(geometry.camber)[0]
         tangent = np.array([math.cos(math.radians(inlet)), math.sin(math.radians(inlet))])
         center = nose + true_radius * tangent
-        assert np.linalg.norm(circle - center, axis=1) == pytest.approx(
-            true_radius, rel=1e-12
-        )
+        assert np.linalg.norm(circle - center, axis=1) == pytest.approx(true_radius, rel=1e-12)
         assert np.linalg.norm(center - nose) == pytest.approx(true_radius, rel=1e-14)
         assert osculating_radius(law, float(chain.arcs[0].curvature), 1e-6, 1) == pytest.approx(
             _circumradius(chain, law, 1e-6), rel=1e-4
@@ -670,49 +661,11 @@ def test_thickness_law_is_positive_and_unimodal():
     assert np.all(np.diff(half[peak + 1 :]) <= 0.0)
 
 
-def test_trailing_edge_wedge_convention_matches_geometry_v1():
-    """两个内核共享「半楔角 = 两侧叶面切线夹角之半」的语义，但只在直线中弧线上
-    ``h'(1) = -tan(beta)`` 才等于几何楔角。
-
-    ``geometry-v1`` 把厚度参数化成 ``dh/dx|_1 = -tan(beta)``；本内核在同样的直线
-    中弧线条件（``L = 1``、``chi_2 = 0``、``kappa = 0``）下必须逐位回到该式子。
-    真实的弯中弧线上换算含弧长因子 ``L`` 与曲率项 ``h kappa``，因此要比的是**几何
-    实现楔角**：本内核让实现值等于请求值，而 v1 的 ``dh/dx`` 参数并不等于几何楔角
-    （同样请求 6°，v1 的实际几何半楔角只有 5.8224°）。旧的同义反复断言
-    ``v1_slope == aft_end_slope_for_wedge(6.0)`` 正是在这一点上错的。
-    """
-
-    from cascade_forge.geometry2d import _generate_profile_v1, _half_thickness
-    from cascade_forge.models import GeometrySpec
-
+def test_trailing_edge_wedge_convention_matches_analytic_straight_camber():
     beta = 6.0
-    v1 = GeometrySpec(
-        inlet_metal_angle_deg=40.0,
-        turning_angle_deg=20.0,
-        quarter_angle_bias_deg=0.0,
-        three_quarter_angle_bias_deg=0.0,
-        max_thickness_ratio=0.10,
-        max_thickness_x_ratio=0.40,
-        leading_edge_radius_ratio=0.006,
-        trailing_edge_thickness_ratio=0.006,
-        trailing_edge_half_wedge_deg=beta,
-        fore_shape_factor=1.0,
-        aft_shape_factor=1.0,
-    )
-    v1_stations = np.linspace(0.0, 1.0, 200001)
-    v1_slope = float(np.gradient(_half_thickness(v1, v1_stations), v1_stations)[-1])
-    # v1 自己的约定：末端弦向斜率就是 -tan(beta)（独立数值测量，不经本内核；
-    # 容差来自差分格式的离散误差，不是约定差异）
-    assert v1_slope == pytest.approx(-math.tan(math.radians(beta)), rel=1e-5)
-
-    # 直线中弧线（L = 1、chi_2 = 0、kappa = 0）：本内核与 v1 在同一约定下一致
-    # （容差来自 v1_slope 的数值差分误差 ~3e-6）
-    assert aft_end_slope_for_wedge(beta, 1.0, 0.0, 0.5 * 0.006, 0.0) == pytest.approx(
-        v1_slope, rel=1e-5
-    )
-    assert half_wedge_from_slope_deg(v1_slope, 1.0, 0.0, 0.5 * 0.006, 0.0) == pytest.approx(
-        beta, abs=1e-4
-    )
+    slope = -math.tan(math.radians(beta))
+    assert aft_end_slope_for_wedge(beta, 1.0, 0.0, 0.003, 0.0) == pytest.approx(slope)
+    assert half_wedge_from_slope_deg(slope, 1.0, 0.0, 0.003, 0.0) == pytest.approx(beta)
 
     # 弯中弧线的几何装配：实现楔角等于请求值（折线独立反算，不用 features 自证）
     spec = _dca(30.0, 20.0).model_copy(update={"trailing_edge_half_wedge_deg": beta})
@@ -720,14 +673,6 @@ def test_trailing_edge_wedge_convention_matches_geometry_v1():
     assert _wedge_from_polyline(geometry.suction, geometry.pressure) == pytest.approx(
         beta, abs=1e-2
     )
-
-    # 反例固化：v1 的 dh/dx 参数**不是**弯中弧线上的几何半楔角
-    v1_profile = _generate_profile_v1(v1)
-    v1_suction = np.asarray(v1_profile.suction)
-    v1_pressure = np.asarray(v1_profile.pressure)
-    v1_measured = _wedge_from_polyline(v1_suction, v1_pressure)
-    assert v1_measured == pytest.approx(5.8224, abs=1e-3)
-    assert v1_measured < beta - 0.1
 
     # 忽略 L 与曲率项会让末端斜率偏平，进而把实现楔角低估（见下一个测试）
     chain = build_arc_chain(spec.mean_line)
@@ -737,7 +682,7 @@ def test_trailing_edge_wedge_convention_matches_geometry_v1():
         outlet_metal_angle_deg=spec.mean_line.outlet_metal_angle_deg,
         terminal_curvature=chain.arcs[-1].curvature,
     )
-    assert abs(law.aft_end_slope) > abs(v1_slope)
+    assert abs(law.aft_end_slope) > abs(slope)
 
 
 def test_trailing_edge_wedge_is_realized_exactly():
@@ -779,9 +724,7 @@ def test_trailing_edge_wedge_is_realized_exactly():
             assert angle_suction == pytest.approx(-outlet - requested, abs=0.05)
             assert angle_pressure == pytest.approx(-outlet + requested, abs=0.05)
             assert measured == pytest.approx(requested, abs=1e-2)
-            assert measured == pytest.approx(
-                0.5 * abs(angle_pressure - angle_suction), abs=0.05
-            )
+            assert measured == pytest.approx(0.5 * abs(angle_pressure - angle_suction), abs=0.05)
             assert law.half_thickness_te == pytest.approx(hte, rel=1e-14)
 
             # features 只是 ``g(f(β)) = β`` 恒等式的复述，单独不构成检查；
@@ -795,9 +738,7 @@ def test_trailing_edge_wedge_is_realized_exactly():
             camber_te = math.degrees(math.atan2(*(camber[-1] - camber[-2])[::-1]))
             assert abs(0.5 * (angle_suction + angle_pressure) - camber_te) < 0.05
             # 反解出的 dh/ds 必须比 -tan(beta) 更陡：换算含 L 因子
-            assert abs(geometry.diagnostics["aft_end_slope"]) > math.tan(
-                math.radians(requested)
-            )
+            assert abs(geometry.diagnostics["aft_end_slope"]) > math.tan(math.radians(requested))
             # 两个叶面切线角是绝对角，围绕 -χ₂ 张开（不是半楔角本身，也不是 0）
             assert geometry.diagnostics["trailing_edge_surface_angle_suction_deg"] == (
                 pytest.approx(-outlet - requested, abs=0.05)
@@ -826,9 +767,7 @@ def test_wedge_definition_is_not_the_self_consistent_corner_halving_one(monkeypa
 
     hte = 0.5 * 0.006
     requested = 6.0
-    spec = _dca(30.0, 20.0).model_copy(
-        update={"trailing_edge_half_wedge_deg": requested}
-    )
+    spec = _dca(30.0, 20.0).model_copy(update={"trailing_edge_half_wedge_deg": requested})
     baseline_geometry = generate_arc_profile(spec)
     baseline = _wedge_from_polyline(baseline_geometry.suction, baseline_geometry.pressure)
     assert baseline == pytest.approx(requested, abs=1e-2)
@@ -854,9 +793,7 @@ def test_wedge_definition_is_not_the_self_consistent_corner_halving_one(monkeypa
     _stub_arc_kernel(monkeypatch, trailing_edge_surface_angles_deg=corner_halved)
     geometry = generate_arc_profile(spec)
     # 恒等式掩盖了错定义：解析审计量与 features 都仍然「正确」。
-    assert geometry.features["trailing_edge_half_wedge_deg"] == pytest.approx(
-        requested, abs=1e-6
-    )
+    assert geometry.features["trailing_edge_half_wedge_deg"] == pytest.approx(requested, abs=1e-6)
     # 独立折线反算则如实报出 2 倍偏差。
     broken = _wedge_from_polyline(geometry.suction, geometry.pressure)
     assert broken == pytest.approx(2.0 * requested, abs=1e-2)
@@ -910,9 +847,7 @@ def test_wedge_polyline_measurement_is_discriminating_across_metal_angles(monkey
             update={"trailing_edge_half_wedge_deg": 6.0, "trailing_edge_thickness_ratio": te}
         )
         geometry = generate_arc_profile(spec)
-        deviations.append(
-            abs(_wedge_from_polyline(geometry.suction, geometry.pressure) - 6.0)
-        )
+        deviations.append(abs(_wedge_from_polyline(geometry.suction, geometry.pressure) - 6.0))
     assert max(deviations) > 0.1
 
 
@@ -1010,9 +945,7 @@ def test_maximum_feasible_wedge_is_about_fourteen_degrees():
     assert ceiling > 14.0
     assert ceiling == pytest.approx(14.378, abs=0.02)
     # 弧长/曲率因子（L = 1.0312、hκ < 0）只把上界从 14.81 改到 14.38，解释不了 11.10
-    assert maximum_feasible_half_wedge_deg(0.10, 0.40, 0.006) == pytest.approx(
-        14.806, abs=0.02
-    )
+    assert maximum_feasible_half_wedge_deg(0.10, 0.40, 0.006) == pytest.approx(14.806, abs=0.02)
 
 
 def test_wedges_near_the_ceiling_are_accepted_and_beyond_are_rejected():
@@ -1029,7 +962,7 @@ def test_wedges_near_the_ceiling_are_accepted_and_beyond_are_rejected():
     assert _wedge_from_polyline(geometry.suction, geometry.pressure) == pytest.approx(
         requested, abs=1e-2
     )
-    from cascade_forge.circular_arc import has_self_intersection
+    from cascade_forge.domain.circular_arc import has_self_intersection
 
     suction = np.asarray(geometry.suction)
     pressure = np.asarray(geometry.pressure)
@@ -1051,7 +984,7 @@ def test_curvature_search_finds_a_feasible_entry_second_derivative_at_twelve_deg
     区间 ``[Y_hi(m), Y_lo(m)]``，必须先把区间扫出来。
     """
 
-    from cascade_forge.circular_arc import _normal_thickness_curvature_search
+    from cascade_forge.domain.circular_arc import _normal_thickness_curvature_search
 
     spec = default_double_arc_spec()
     chain = build_arc_chain(spec.mean_line)
@@ -1169,9 +1102,9 @@ def test_surface_curvature_matches_numerical_differentiation():
         )
         assert core.sum() > 0.6 * count
         # 曲率会穿过零点，相对误差在那里无意义，故只按绝对误差比较。
-        assert np.allclose(
-            numeric[core], analytic[core], rtol=0.0, atol=5e-3
-        ), f"side={side} 核心区曲率偏差过大"
+        assert np.allclose(numeric[core], analytic[core], rtol=0.0, atol=5e-3), (
+            f"side={side} 核心区曲率偏差过大"
+        )
         # 前缘邻域必须仍然有限（发散只允许出现在 s -> 0 的极限处）。
         near_le = (stations > 0.05) & (stations < 0.25) & np.isfinite(numeric)
         assert np.all(np.isfinite(analytic[near_le]))
@@ -1231,9 +1164,7 @@ def test_surface_thickness_is_symmetric_about_the_mean_line():
     stations = np.asarray(geometry.arc_parameter)
     assert np.allclose(thickness, 2.0 * law(stations), atol=1e-13)
     # 合同值也必须命中：s_t 处 2h = t/c，尾缘处 2h = t_TE/c。
-    assert thickness[int(np.argmax(thickness))] == pytest.approx(
-        spec.max_thickness_ratio, rel=1e-6
-    )
+    assert thickness[int(np.argmax(thickness))] == pytest.approx(spec.max_thickness_ratio, rel=1e-6)
     assert thickness[-1] == pytest.approx(spec.trailing_edge_thickness_ratio, rel=1e-12)
 
 
@@ -1252,7 +1183,7 @@ def test_suction_and_pressure_are_free_of_self_intersection_and_ordered():
     geometry = generate_arc_profile(default_double_arc_spec())
     suction, pressure, _, _ = geometry.arrays()
     closed = np.vstack([suction, pressure[::-1]])
-    from cascade_forge.circular_arc import has_self_intersection
+    from cascade_forge.domain.circular_arc import has_self_intersection
 
     assert not has_self_intersection(closed)
     assert np.all(np.abs(suction[:, 1]) > np.abs(pressure[:, 1]) - 1e-12)
@@ -1324,7 +1255,7 @@ def test_profile_is_well_formed_across_the_metal_angle_domain(inlet, outlet):
     assert geometry.diagnostics["pressure_offset_clearance_min"] > 0.0
     assert geometry.diagnostics["node_tangency_error"] < 1e-14
     # 自交必须真的重算一遍：diagnostics 里那个键是常量 0.0。
-    from cascade_forge.circular_arc import has_self_intersection
+    from cascade_forge.domain.circular_arc import has_self_intersection
 
     suction = np.asarray(geometry.suction)
     pressure = np.asarray(geometry.pressure)
@@ -1340,7 +1271,7 @@ def test_mean_line_chain_is_exact_across_the_wide_metal_angle_domain(inlet, outl
 
     chain = build_arc_chain(_dca(inlet, outlet).mean_line, check_closure=True)
     invariants = __import__(
-        "cascade_forge.circular_arc", fromlist=["check_chain_invariants"]
+        "cascade_forge.domain.circular_arc", fromlist=["check_chain_invariants"]
     ).check_chain_invariants(chain)
     assert invariants["node_rebuild_error"] < 1e-12
     assert invariants["chord_closure_error"] < 1e-12
@@ -1386,9 +1317,7 @@ def _ceiling_for(spec: ArcProfileSpec, *, with_leading_edge: bool = True) -> flo
         arc_length=chain.total_length,
         outlet_metal_angle_deg=spec.mean_line.outlet_metal_angle_deg,
         terminal_curvature=chain.arcs[-1].curvature,
-        leading_edge_radius_ratio=(
-            spec.leading_edge_radius_ratio if with_leading_edge else None
-        ),
+        leading_edge_radius_ratio=(spec.leading_edge_radius_ratio if with_leading_edge else None),
     )
 
 
@@ -1548,9 +1477,7 @@ def test_feasibility_report_reports_no_bound_below_the_domain_floor():
     # 该合同在任何允许的楔角下都无法实现
     for wedge in (0.51, 1.0, 6.0, 44.9):
         with pytest.raises(ThicknessLawInfeasible):
-            generate_arc_profile(
-                spec.model_copy(update={"trailing_edge_half_wedge_deg": wedge})
-            )
+            generate_arc_profile(spec.model_copy(update={"trailing_edge_half_wedge_deg": wedge}))
 
 
 def test_feasibility_report_separates_wedge_bounds_from_geometry_feasibility():
@@ -1578,9 +1505,7 @@ def test_feasibility_report_separates_wedge_bounds_from_geometry_feasibility():
     # 生成失败与楔角无关：换任何一个允许的楔角都失败
     for wedge in (0.51, 6.0, 44.9):
         with pytest.raises(ArithmeticError):
-            generate_arc_profile(
-                spec.model_copy(update={"trailing_edge_half_wedge_deg": wedge})
-            )
+            generate_arc_profile(spec.model_copy(update={"trailing_edge_half_wedge_deg": wedge}))
 
 
 def test_aft_only_ceiling_is_a_loose_upper_bound_not_the_acceptance_boundary():
@@ -1605,9 +1530,7 @@ def test_aft_only_ceiling_is_a_loose_upper_bound_not_the_acceptance_boundary():
     between = 0.5 * (aft_only + full)
     assert full < between < aft_only
     with pytest.raises(ThicknessLawInfeasible):
-        generate_arc_profile(
-            base.model_copy(update={"trailing_edge_half_wedge_deg": between})
-        )
+        generate_arc_profile(base.model_copy(update={"trailing_edge_half_wedge_deg": between}))
     # 真实边界处必须成功
     generate_arc_profile(base.model_copy(update={"trailing_edge_half_wedge_deg": full}))
 
@@ -1655,9 +1578,7 @@ def test_interior_station_bounds_match_the_real_feasible_set():
 def test_interior_station_bounds_report_empty_intervals_explicitly():
     """其余站位已使链不可行时，区间必须是 ``(nan, nan)`` 而不是一个很窄的区间。"""
 
-    bounds = arc_kernel.interior_station_bounds(
-        40.0, 10.0, (25.0, 10.0, -5.0), (0.2, 0.4)
-    )
+    bounds = arc_kernel.interior_station_bounds(40.0, 10.0, (25.0, 10.0, -5.0), (0.2, 0.4))
     assert all(math.isnan(low) and math.isnan(high) for low, high in bounds)
 
 
@@ -1700,9 +1621,7 @@ def test_arc_evaluation_stays_accurate_for_near_degenerate_node_angles():
     """
 
     for gap in (1e-9, 1e-11, 1e-13):
-        chain = build_arc_chain(
-            build_mca_mean_line(45.0, 45.0, (45.0, 20.0, 20.0 - gap, -45.0))
-        )
+        chain = build_arc_chain(build_mca_mean_line(45.0, 45.0, (45.0, 20.0, 20.0 - gap, -45.0)))
         assert chain.radius_array.max() > 1e9
         parameter = np.linspace(0.0, 1.0, 41)
         points = chain.evaluate(parameter)["points"]
@@ -1798,8 +1717,7 @@ def test_single_arc_angle_tolerance_is_shared_by_model_and_generator():
         )
         radian_gap = abs(
             math.degrees(
-                math.radians(spec.inlet_metal_angle_deg)
-                - math.radians(spec.outlet_metal_angle_deg)
+                math.radians(spec.inlet_metal_angle_deg) - math.radians(spec.outlet_metal_angle_deg)
             )
         )
         assert radian_gap <= tolerance
@@ -1832,11 +1750,15 @@ def test_double_arc_rejects_an_infeasible_junction_angle_at_the_model_level():
         outlet_metal_angle_deg=1.0,
         closure=MeanLineClosure.MAX_CAMBER,
     )
-    assert 0.0 < arc_kernel.double_arc_first_span(
-        math.radians(feasible.inlet_metal_angle_deg),
-        math.radians(-feasible.outlet_metal_angle_deg),
-        0.0,
-    ) < 1.0
+    assert (
+        0.0
+        < arc_kernel.double_arc_first_span(
+            math.radians(feasible.inlet_metal_angle_deg),
+            math.radians(-feasible.outlet_metal_angle_deg),
+            0.0,
+        )
+        < 1.0
+    )
 
 
 def test_model_rejects_everything_the_generator_would_reject():

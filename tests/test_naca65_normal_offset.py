@@ -5,18 +5,18 @@ import json
 import numpy as np
 import pytest
 
-from cascade_forge.benchmark_naca65 import benchmark_specs
-from cascade_forge.curves import CurveEvaluator, unit_tangent_and_normal
-from cascade_forge.fitting_naca65 import point_to_polyline
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
-from cascade_forge.naca65 import generate_naca65
-from cascade_forge.normal_bspline import (
+from cascade_forge.domain.curves import CurveEvaluator, unit_tangent_and_normal
+from cascade_forge.domain.fitting_naca65 import point_to_polyline
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
+from cascade_forge.domain.naca65 import generate_naca65
+from cascade_forge.domain.normal_bspline import (
     evaluate_normal_offset,
     fit_decomposition,
     generate_normal_offset_profile,
     normal_offset_curvatures,
 )
-from cascade_forge.storage_naca65 import NACA65BenchmarkStore
+from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+from cascade_forge.workbench.benchmark_naca65 import benchmark_specs
 
 
 @pytest.mark.parametrize("native_spec", benchmark_specs(NACA65BenchmarkConfig()))

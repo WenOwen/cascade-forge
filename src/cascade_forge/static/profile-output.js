@@ -5,12 +5,12 @@
     naca65: {thickness_ratio: "名义厚度 t/c", design_lift_coefficient: "设计升力系数"},
     double_arc: {max_thickness_ratio: "最大厚度 t/c", max_thickness_station: "厚度位置 sₜ", inlet_metal_angle_deg: "进口金属角", outlet_metal_angle_deg: "出口金属角", trailing_edge_half_wedge_deg: "尾缘半楔角"}
   };
-  async function request(url, body) {
+  async function request(url, body, options = {}) {
     if (window.CFDatabase && url.startsWith("/api/workbench/") && !url.startsWith("/api/workbench/databases")) {
       url = window.CFDatabase.query(url);
       if (body?.family) body = window.CFDatabase.body(body);
     }
-    const response = await fetch(url, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+    const response = await fetch(url, {method: body ? "POST" : "GET", ...(body ? {headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {}), ...options});
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail || `HTTP ${response.status}`));
@@ -61,7 +61,7 @@
       const result = await (await request(`/api/workbench/profiles?family=${provider.request().family}&limit=100`)).json();
       for (const name of ["root_id", "tip_id"]) {
         const select = geometryForm.elements[name]; select.replaceChildren(new Option("当前叶型", identifier));
-        result.items.filter(item => item.geometry_id !== identifier).forEach((item, index) => select.add(new Option(`${item.name}（样本 ${index + 1}）`, item.geometry_id)));
+        result.items.filter(item => item.geometry_id !== identifier).forEach((item, index) => select.add(new Option(`${item.label || item.name}（样本 ${index + 1}）`, item.geometry_id)));
       }
       dialog.querySelector("[data-geomturbo-error]").textContent = ""; dialog.showModal();
       status.textContent = "请填写三维尺寸后导出";

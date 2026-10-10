@@ -6,17 +6,17 @@
   <meta name="color-scheme" content="light">
   <title>{% block title %}Cascade Forge{% endblock %}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/app.css?v=2.2-simple-workflow">
+  <link rel="stylesheet" href="/static/app.css?v=3.1-layered">
   <link rel="stylesheet" href="/static/guidance.css?v=2.2-simple-workflow">
-  <link rel="stylesheet" href="/static/profile-rail.css?v=5">
+  <link rel="stylesheet" href="/static/profile-rail.css?v=3.1-layered">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/assets/plotly.min.js" defer></script>
-  <script src="/static/app.js?v=3.0-profile-workflow.9" defer></script>
+  <script src="/static/app.js?v=3.1-layered" defer></script>
   {% block extra_scripts %}{% endblock %}
-  <script src="/static/database-picker.js?v=2" defer></script>
-  <script src="/static/profile-rail.js?v=4" defer></script>
+  <script src="/static/database-picker.js?v=3.1-layered" defer></script>
+  <script src="/static/profile-rail.js?v=3.1-layered" defer></script>
 </head>
-<body data-page="{{ page|default('overview') }}">
+<body data-page="{{ page|default('studio') }}">
   <a class="skip-to-content" href="#main-content">跳转到主内容</a>
   <button class="sidebar-toggle" type="button" aria-label="打开导航" data-sidebar-toggle>☰</button>
   <div class="sidebar-scrim" data-sidebar-scrim></div>
@@ -25,7 +25,12 @@
     {% set daily_navigation = [
       ('studio','/studio','自定义叶型','◇'),
       ('standard','/standard','标准叶型','◠'),
-      ('database','/database','数据库浏览','▦')
+      ('database','/database','数据库浏览','▦'),
+      ('naca65','/naca65','NACA65 专项','N'),
+      ('arc','/arc','圆弧专项','◡'),
+      ('compare','/compare','叶型比较','⇄'),
+      ('cascade','/cascade','叶栅检查','≋'),
+      ('blade','/blade','三维叶片','▱')
     ] %}
     <nav aria-label="日常设计">
       <p class="nav-group-label">日常设计</p>
@@ -77,30 +82,9 @@
         'note': '输出截面数控制展向插值密度；叶片数控制周向排列数量。',
         'links': [('/database', '先选择二维截面')]
       },
-      'anchors': {
-        'purpose': '拟合 48 个 NASA 参考截面，为正式批量建库做准备。',
-        'steps': ['点击生成 / 恢复 48 个拟合，等待后台任务完成。', '查看拟合误差和状态；生成门禁通过后才能批量生成正式叶型。', '完成后进入数据集与批次，继续初始化。'],
-        'links': [('/datasets', '继续批量建库'), ('/jobs', '查看后台任务')]
-      },
-      'datasets': {
-        'purpose': '按步骤初始化数据库，批量生成可检索的正式叶型。',
-        'steps': ['先完成 NASA 锚点拟合，让生成门禁通过。', '设置目标有效叶型数量和并行进程，创建或恢复批次。', '批次完成后运行审计，再到数据库筛选叶型。'],
-        'links': [('/database', '浏览已有叶型'), ('/jobs', '查看后台任务')]
-      },
-      'audit': {
-        'purpose': '检查数据库记录和几何文件是否完整、可重复生成。',
-        'steps': ['完成批量生成后，点击运行完整审计。', '查看各项检查结果；需要排查时展开原始审计 JSON。'],
-        'note': '审计通过表示数据与几何检查通过，不代表气动性能优良。',
-        'links': [('/datasets', '查看数据集状态'), ('/database', '浏览叶型')]
-      },
-      'jobs': {
-        'purpose': '查看后台任务进度、失败原因，以及任务生成的文件。',
-        'steps': ['点击刷新查看最新状态，找到对应的任务类型。', '完成后从结果 / 制品列打开输出；制品就是任务生成的文件。'],
-        'links': [('/datasets', '返回批量建库')]
-      }
     } %}
     <div class="page-content" id="main-content" tabindex="-1">
-      {% set guide = page_guides.get(page|default('overview')) %}
+      {% set guide = page_guides.get(page|default('studio')) %}
       {% if guide %}
       <details class="page-guide">
         <summary><span class="page-guide-purpose">{{ guide.purpose }}</span><span class="page-guide-toggle">怎么用<span aria-hidden="true">⌄</span></span></summary>

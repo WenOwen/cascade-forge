@@ -334,6 +334,7 @@
       ];
       Charts.render("profile-chart", traces, { xaxis: { title: "轴向 x/c", constrain: "domain", zeroline: false }, yaxis: { title: "切向 y/c", scaleanchor: "x", scaleratio: 1, zeroline: false }, uirevision: `${geometry.geometry_id}:${placed.stagger_deg}`, annotations: [{ x: placed.stagger_arc.at(-1)[0], y: placed.stagger_arc.at(-1)[1], text: `γ = ${placed.stagger_deg.toFixed(2)}°`, showarrow: false, xshift: 18, yshift: 10 }] });
       $("[data-geometry-id]").textContent = geometry.geometry_id;
+      $("[data-geometry-label]").textContent = payload.label || "自定义叶型";
       const validation = $("[data-validation-status]"); validation.textContent = ({ valid: "几何有效", warning: "有几何警告", rejected: "几何未通过" })[payload.validation.status] || payload.validation.status; validation.className = `pill ${payload.validation.status}`;
       renderIssues(payload.validation);
       $("[data-le-radius]").textContent = `r/c = ${geometry.edge_metrics.leading_edge_radius_ratio.toExponential(4)}`;
@@ -381,94 +382,6 @@
     preview(true);
   }
 
-  function initDatabase() {
-    const root = $("[data-database-root]"); if (!root) return;
-    const form = $("[data-database-filters]", root);
-    const body = $("[data-database-body]", root);
-    const prev = $("[data-page-prev]", root), next = $("[data-page-next]", root);
-    const selectPage = $("[data-select-page]", root);
-    const errorNode = $("[data-database-error]", root), retry = $("[data-database-retry]", root);
-    const selected = new Set();
-    let offset = 0, total = 0, rows = [], busy = false, requestId = 0;
-    let filters = new URLSearchParams(location.search);
-    for (const name of ["origin", "status", "sort", "descending", "limit", "search"]) {
-      if (filters.has(name)) form.elements[name].value = filters.get(name);
-    }
-    if (!["25", "50", "100"].includes(form.elements.limit.value)) form.elements.limit.value = "50";
-    if (!form.elements.sort.value) form.elements.sort.value = "geometry_id";
-    if (!form.elements.descending.value) form.elements.descending.value = "false";
-    offset = Math.max(0, Number.parseInt(filters.get("offset"), 10) || 0);
-    function readFilters() { filters = new URLSearchParams(new FormData(form)); filters.set("search", form.elements.search.value.trim()); }
-    readFilters();
-    function updateControls() {
-      const limit = Number(filters.get("limit"));
-      prev.disabled = busy || offset === 0; next.disabled = busy || offset + limit >= total;
-      $("[data-selection-count]", root).textContent = `已选 ${selected.size} 条（跨页保留）`;
-      $("[data-clear-selected]", root).disabled = selected.size === 0;
-      $("[data-compare-selected]", root).disabled = selected.size < 2 || selected.size > 12;
-      $("[data-export-selected]", root).disabled = selected.size !== 1;
-      const checked = rows.filter(row => selected.has(row.geometry_id)).length;
-      selectPage.disabled = busy || !rows.length;
-      selectPage.checked = rows.length > 0 && checked === rows.length;
-      selectPage.indeterminate = checked > 0 && checked < rows.length;
-      $$("[data-select-id]", root).forEach(box => { box.checked = selected.has(box.dataset.selectId); });
-    }
-    async function load() {
-      const sequence = ++requestId, limit = Number(filters.get("limit"));
-      const query = new URLSearchParams(filters); query.set("offset", offset);
-      busy = true; rows = []; updateControls(); root.setAttribute("aria-busy", "true");
-      errorNode.hidden = retry.hidden = true;
-      body.innerHTML = '<tr><td colspan="8" class="empty-state">正在加载叶型…</td></tr>';
-      $("[data-database-count]", root).textContent = "正在读取记录…";
-      try {
-        const data = await fetchJSON(`/api/v2/geometries?${query}`);
-        if (sequence !== requestId) return;
-        total = data.total;
-        if (offset > 0 && offset >= total) { offset = Math.max(0, Math.ceil(total / limit) - 1) * limit; return load(); }
-        rows = data.items;
-        history.replaceState(null, "", `/database?${query}`);
-        $("[data-database-count]", root).textContent = total ? `${total} 条记录 · 显示 ${offset + 1}–${offset + rows.length}` : "0 条匹配记录";
-        $("[data-page-label]", root).textContent = total ? `第 ${Math.floor(offset / limit) + 1} / ${Math.ceil(total / limit)} 页` : "无匹配记录";
-        body.innerHTML = rows.map(row => `<tr><td><input type="checkbox" data-select-id="${escapeHTML(row.geometry_id)}" aria-label="选择 ${escapeHTML(row.geometry_id)}"></td><td><code>${escapeHTML(row.geometry_id)}</code></td><td>${escapeHTML(row.kernel)}</td><td>${statusPill(row.validation_status)}</td><td>${Number(row.max_thickness_ratio).toFixed(5)}</td><td>${Number(row.max_thickness_x_ratio).toFixed(5)}</td><td>${Number(row.inlet_metal_angle_deg).toFixed(2)}°</td><td><button class="button" data-view-id="${escapeHTML(row.geometry_id)}">详情</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">没有匹配记录，请调整或重置筛选；尚未生成数据时可前往「数据集与批次」。</td></tr>';
-      } catch (error) {
-        if (sequence !== requestId) return;
-        total = 0; body.innerHTML = '<tr><td colspan="8" class="empty-state">加载失败</td></tr>';
-        errorNode.textContent = `无法加载叶型：${error.message}`; errorNode.hidden = retry.hidden = false;
-        $("[data-database-count]", root).textContent = "记录数暂不可用";
-        $("[data-page-label]", root).textContent = "请重试";
-      } finally {
-        if (sequence === requestId) { busy = false; root.setAttribute("aria-busy", "false"); updateControls(); }
-      }
-    }
-    body.addEventListener("change", event => {
-      const box = event.target.closest("[data-select-id]"); if (!box) return;
-      box.checked ? selected.add(box.dataset.selectId) : selected.delete(box.dataset.selectId); updateControls();
-    });
-    body.addEventListener("click", async event => {
-      const button = event.target.closest("[data-view-id]"); if (!button) return;
-      button.disabled = true;
-      try {
-        const id = button.dataset.viewId, encoded = encodeURIComponent(id);
-        const data = await fetchJSON(`/api/v2/geometries/${encoded}`);
-        const dialog = $("#geometry-detail");
-        $("[data-detail-content]").innerHTML = `<p class="eyebrow">GEOMETRY DETAIL</p><h2><code>${escapeHTML(id)}</code></h2><div class="button-row"><a class="button" href="/api/v2/geometries/${encoded}/export?format=csv">下载 CSV 坐标</a><a class="button" href="/api/v2/geometries/${encoded}/export?format=json">下载 JSON 几何</a><a class="button" href="/cascade?geometry_id=${encoded}">检查叶栅</a></div><div id="detail-chart" class="plotly-chart analysis-chart"></div><details><summary>完整几何特征</summary><pre>${escapeHTML(JSON.stringify(data.features, null, 2))}</pre></details>`;
-        if (!dialog.open) dialog.showModal();
-        const g = data.geometry;
-        await Charts.render("detail-chart", [{ ...xy(g.suction), name: "吸力面", line: { color: colors.blue } }, { ...xy(g.pressure), name: "压力面", line: { color: colors.orange } }], { yaxis: { scaleanchor: "x", scaleratio: 1, title: "y/c" }, xaxis: { title: "x/c" } });
-      } catch (error) { notice(error.message, true); } finally { button.disabled = false; }
-    });
-    selectPage.addEventListener("change", () => { rows.forEach(row => selectPage.checked ? selected.add(row.geometry_id) : selected.delete(row.geometry_id)); updateControls(); });
-    $("[data-clear-selected]", root).addEventListener("click", () => { selected.clear(); updateControls(); });
-    form.addEventListener("submit", event => { event.preventDefault(); offset = 0; readFilters(); load(); });
-    form.addEventListener("reset", () => setTimeout(() => { offset = 0; readFilters(); load(); }, 0));
-    prev.addEventListener("click", () => { offset = Math.max(0, offset - Number(filters.get("limit"))); load(); });
-    next.addEventListener("click", () => { offset += Number(filters.get("limit")); load(); });
-    retry.addEventListener("click", load);
-    $("[data-close-dialog]").addEventListener("click", () => $("#geometry-detail").close());
-    $("[data-compare-selected]", root).addEventListener("click", () => { sessionStorage.setItem("cf-compare", [...selected].join("\n")); location.href = "/compare"; });
-    $("[data-export-selected]", root).addEventListener("click", () => { const id = [...selected][0]; location.href = `/api/v2/geometries/${encodeURIComponent(id)}/export?format=${$("[data-export-format]", root).value}`; });
-    load();
-  }
 
   function initCompare() {
     const root = $("[data-compare-root]"); if (!root) return;
@@ -538,12 +451,6 @@
     const form = $("[data-cascade-form]"); if (!form) return; const linkedId = new URLSearchParams(location.search).get("geometry_id"); if (linkedId) form.elements.geometry_id.value = linkedId; const range = form.elements.solidity; range.addEventListener("input", () => $("output[data-for='solidity']").textContent = Number(range.value).toFixed(2)); form.addEventListener("submit", async event => { event.preventDefault(); try { const data = await fetchJSON("/api/v2/cascade", { method: "POST", body: JSON.stringify({ geometry_id: form.elements.geometry_id.value.trim(), solidity: Number(range.value) }) }); const traces = []; data.passages.forEach((passage, index) => { traces.push({ ...xy(passage.suction), name: `SS ${passage.offset}`, line: { color: index === 1 ? colors.blue : "#b7b7bc" } }, { ...xy(passage.pressure), name: `PS ${passage.offset}`, line: { color: index === 1 ? colors.orange : "#d0d0d4" } }); }); Charts.render("cascade-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "节距方向 y/c" }, xaxis: { title: "x/c" }, showlegend: false }); $("[data-cascade-summary]").innerHTML = `<dl class="definition-grid"><dt>状态</dt><dd>${statusPill(data.validation.status)}</dd><dt>节距 c</dt><dd>${data.pitch_ratio.toFixed(5)}</dd><dt>喉道代理</dt><dd>${Number(data.validation.metrics.cascade_throat_proxy_ratio).toFixed(5)}</dd></dl>`; } catch (error) { notice(error.message, true); } });
   }
 
-  function initAnchors() {
-    const button = $("[data-start-anchor-fit]"); if (!button) return;
-    async function loadFits() { const status = $("[data-anchor-status]")?.value || ""; try { const data = await fetchJSON(`/api/v2/anchor-fits?limit=100${status ? `&status=${status}` : ""}`); $("[data-anchor-fit-body]").innerHTML = data.items.map(row => `<tr><td><code>${escapeHTML(row.source_anchor_id)}</code></td><td>${statusPill(row.fit_status)}</td><td>${Number(row.core_rms_distance_ratio).toExponential(3)}</td><td>${Number(row.core_max_distance_ratio).toExponential(3)}</td><td>${Number(row.rms_distance_ratio).toExponential(3)}</td><td>${Number(row.hausdorff_approx_ratio).toExponential(3)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty-state">尚无派生拟合</td></tr>`; } catch (error) { notice(error.message, true); } }
-    $("[data-anchor-status]")?.addEventListener("change", loadFits); loadFits();
-    button.addEventListener("click", async () => { button.disabled = true; try { const queued = await fetchJSON("/api/v2/anchor-fits", { method: "POST", body: "{}" }); const state = $("[data-anchor-job-state]"); const job = await pollJob(queued.job_id, value => { state.textContent = value.status; state.className = `pill ${value.status}`; $("[data-anchor-progress]").style.width = value.status === "running" ? "55%" : value.status === "completed" ? "100%" : "8%"; }); if (job.status === "failed") throw new Error(job.error); $("[data-anchor-message]").textContent = `完成：${job.result.anchors} 个锚点，${job.result.anchor_fits} 个派生拟合。`; await loadFits(); notice("NASA 锚点拟合完成"); } catch (error) { notice(error.message, true); } finally { button.disabled = false; } });
-  }
 
   function initBlade() {
     const root = $("[data-blade-root]"); if (!root) return; const editor = $("[data-section-editor]"); const template = $("#section-row-template");
@@ -552,17 +459,8 @@
     $("[data-blade-form]").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget; const sections = $$(".section-row", editor).map(row => { const value = name => row.querySelector(`[name='${name}']`).value; return { span_fraction: Number(value("span_fraction")), radius_m: Number(value("radius_m")), chord_m: Number(value("chord_m")), geometry_id: value("geometry_id"), stagger_deg: Number(value("stagger_deg")), axial_offset_m: 0, tangential_offset_m: 0, lean_m: Number(value("lean_m")), sweep_m: Number(value("sweep_m")) }; }); const schedule = { name: form.elements.name.value, blade_count: Number(form.elements.blade_count.value), rotation_direction: form.elements.rotation_direction.value, sections, output_section_count: Number(form.elements.output_section_count.value), units: "m" }; try { const preview = await fetchJSON("/api/v2/blades/preview", { method: "POST", body: JSON.stringify(schedule) }); const traces = []; preview.sections.forEach((section, index) => ["suction_xyz", "pressure_xyz"].forEach((side, sideIndex) => { const points = section[side]; traces.push({ type: "scatter3d", mode: "lines", x: points.map(p => p[0]), y: points.map(p => p[1]), z: points.map(p => p[2]), name: `${index + 1} ${sideIndex ? "PS" : "SS"}`, line: { color: sideIndex ? colors.orange : colors.blue, width: 3 }, showlegend: index === 0 }); })); Charts.render("blade-chart", traces, { scene: { aspectmode: "data", xaxis: { title: "X / m" }, yaxis: { title: "Y / m" }, zaxis: { title: "Z / m" } }, margin: { l: 0, r: 0, t: 12, b: 0 } }); const queued = await fetchJSON("/api/v2/blades", { method: "POST", body: JSON.stringify(schedule) }); const summary = $("[data-blade-job]"); const job = await pollJob(queued.job_id, value => summary.textContent = `Job ${value.status}…`); if (job.status === "failed") throw new Error(job.error); summary.innerHTML = `已生成 <code>${escapeHTML(job.result.blade_id)}</code> · <a href="/api/v2/artifacts/${encodeURI(job.result.artifact)}">下载 GeomTurbo</a>`; } catch (error) { notice(error.message, true); } });
   }
 
-  function initDatasets() {
-    const form = $("[data-batch-form]"); if (!form) return; form.addEventListener("submit", async event => { event.preventDefault(); try { const queued = await fetchJSON("/api/v2/batches", { method: "POST", body: JSON.stringify({ target_valid: Number(form.elements.target_valid.value), workers: Number(form.elements.workers.value) }) }); const summary = $("[data-batch-status]"); const progress = $("[data-batch-progress]"); const job = await pollJob(queued.job_id, value => { summary.textContent = `Job ${value.status} · ${queued.job_id}`; progress.style.width = value.status === "running" ? "58%" : value.status === "completed" ? "100%" : "8%"; }); if (job.status === "failed") throw new Error(job.error); summary.innerHTML = `完成 ${job.result.generated_valid} 个生成叶型；接受率 ${(job.result.acceptance_rate * 100).toFixed(2)}%。`; notice("数据集批次完成"); } catch (error) { notice(error.message, true); } });
-  }
 
-  function initAudit() {
-    const button = $("[data-run-audit]"); if (!button) return; button.addEventListener("click", async () => { button.disabled = true; try { const data = await fetchJSON("/api/v2/audit?rebuild_sample=8"); const ring = $("[data-audit-ring]"); ring.textContent = data.valid ? "PASS" : "FAIL"; ring.className = `audit-ring ${data.valid ? "pass" : "fail"}`; $("[data-audit-title]").textContent = data.valid ? "数据集通过审计" : "数据集存在未通过项"; $("[data-audit-checks]").innerHTML = Object.entries(data.checks).map(([key, value]) => `<div class="audit-check"><span>${escapeHTML(key)}</span><strong class="${value ? "pass" : "fail"}">${value ? "通过" : "失败"}</strong></div>`).join(""); $("[data-audit-json]").textContent = JSON.stringify(data, null, 2); } catch (error) { notice(error.message, true); } finally { button.disabled = false; } });
-  }
 
-  function initJobs() {
-    const root = $("[data-jobs-root]"); if (!root) return; async function load() { try { const data = await fetchJSON("/api/v2/jobs"); $("[data-jobs-empty]").hidden = data.items.length > 0; $("[data-jobs-body]").innerHTML = data.items.map(job => { const artifact = job.result?.artifact ? `<a href="/api/v2/artifacts/${encodeURI(job.result.artifact)}">下载制品</a>` : job.error ? escapeHTML(job.error) : "—"; return `<tr><td><code>${escapeHTML(job.job_id)}</code></td><td>${escapeHTML(job.job_type)}</td><td>${statusPill(job.status)}</td><td>${escapeHTML(job.updated_at)}</td><td>${artifact}</td></tr>`; }).join(""); } catch (error) { notice(error.message, true); } } $("[data-refresh-jobs]")?.addEventListener("click", load); load();
-  }
 
-  document.addEventListener("DOMContentLoaded", () => { initShell(); initStudio(); initDatabase(); initCompare(); initCascade(); initAnchors(); initBlade(); initDatasets(); initAudit(); initJobs(); });
+  document.addEventListener("DOMContentLoaded", () => { initShell(); initStudio(); initCompare(); initCascade(); initBlade(); });
 })();

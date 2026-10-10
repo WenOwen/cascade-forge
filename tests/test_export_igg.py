@@ -6,14 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from cascade_forge.benchmark_naca65 import run_naca65_benchmark
+from cascade_forge.api.app import create_app
 from cascade_forge.cli import app
-from cascade_forge.export_igg import naca65_igg_dat, naca65_igg_split_zip
-from cascade_forge.fitting_naca65 import fit_reference_geometry
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig
-from cascade_forge.naca65 import generate_naca65
-from cascade_forge.storage_naca65 import NACA65BenchmarkStore
-from cascade_forge.web import create_app
+from cascade_forge.domain.export_igg import naca65_igg_dat, naca65_igg_split_zip
+from cascade_forge.domain.fitting_naca65 import fit_reference_geometry
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig
+from cascade_forge.domain.naca65 import generate_naca65
+from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+from cascade_forge.workbench.benchmark_naca65 import run_naca65_benchmark
 
 
 def read_curve_records(text):

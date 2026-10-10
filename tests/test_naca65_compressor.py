@@ -5,12 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from cascade_forge.benchmark_naca65 import benchmark_specs, run_naca65_benchmark
-from cascade_forge.fitting_naca65 import fit_reference_geometry
-from cascade_forge.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
-from cascade_forge.naca65 import generate_naca65
-from cascade_forge.normal_bspline import generate_normal_offset_profile
-from cascade_forge.web import create_app
+from cascade_forge.api.app import create_app
+from cascade_forge.domain.fitting_naca65 import fit_reference_geometry
+from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
+from cascade_forge.domain.naca65 import generate_naca65
+from cascade_forge.domain.normal_bspline import generate_normal_offset_profile
+from cascade_forge.workbench.benchmark_naca65 import benchmark_specs, run_naca65_benchmark
 
 
 def test_published_blower_ordinates_and_separate_legacy_identity():

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cascade-forge"
-version = "1.0.0"
+version = "2.1.0"
 description = "可追溯的压气机叶型几何数据库、三维叶片曲面和 GeomTurbo 工具"
 readme = "README.md"
 requires-python = ">=3.11"

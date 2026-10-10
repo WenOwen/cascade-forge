@@ -10,24 +10,31 @@ import pyarrow.parquet as pq
 import pytest
 from fastapi.testclient import TestClient
 
-from cascade_forge.circular_arc import default_double_arc_spec, generate_arc_profile
-from cascade_forge.geomturbo import parse_geomturbo
-from cascade_forge.models_naca65 import NACA65Spec
-from cascade_forge.naca65 import generate_naca65
-from cascade_forge.web import _default_spec_v2, create_app
+from cascade_forge.api.app import create_app
+from cascade_forge.domain.circular_arc import default_double_arc_spec, generate_arc_profile
+from cascade_forge.domain.geomturbo import parse_geomturbo
+from cascade_forge.domain.models_naca65 import NACA65Spec
+from cascade_forge.domain.naca65 import generate_naca65
+from cascade_forge.pages.context import _default_spec_v2
 
 
 @pytest.fixture()
 def client(tmp_path):
-    return TestClient(create_app(tmp_path / "geometry-v1"))
+    with TestClient(
+        create_app(tmp_path / "geometry-v2", profile_database_root=tmp_path / "databases")
+    ) as client:
+        yield client
 
 
 def request_body(family):
-    return {"family": family, "spec": {
-        "custom": _default_spec_v2().model_dump(mode="json"),
-        "naca65": NACA65Spec(family="65-compressor").model_dump(mode="json"),
-        "double_arc": default_double_arc_spec().model_dump(mode="json"),
-    }[family]}
+    return {
+        "family": family,
+        "spec": {
+            "custom": _default_spec_v2().model_dump(mode="json"),
+            "naca65": NACA65Spec(family="65-compressor").model_dump(mode="json"),
+            "double_arc": default_double_arc_spec().model_dump(mode="json"),
+        }[family],
+    }
 
 
 @pytest.mark.parametrize("family", ["custom", "naca65", "double_arc"])
@@ -52,8 +59,11 @@ def test_preview_save_read_and_duplicate(client, family):
 @pytest.mark.parametrize("family", ["naca65", "double_arc"])
 def test_native_coordinates_are_not_fitted(client, family):
     record = client.post("/api/workbench/preview", json=request_body(family)).json()
-    native = (generate_naca65(NACA65Spec(family="65-compressor"))
-              if family == "naca65" else generate_arc_profile(default_double_arc_spec()))
+    native = (
+        generate_naca65(NACA65Spec(family="65-compressor"))
+        if family == "naca65"
+        else generate_arc_profile(default_double_arc_spec())
+    )
     expected = native.normalized_suction if family == "naca65" else native.suction
     assert record["suction"] == expected
 
@@ -115,9 +125,13 @@ def test_browser_filter_search_and_pagination(client):
 
 @pytest.mark.parametrize("family", ["custom", "naca65", "double_arc"])
 def test_sweep_generates_distinct_parameterized_profiles(client, family):
-    body = {**request_body(family), "parameter": (
-        "thickness_ratio" if family == "naca65" else "max_thickness_ratio"),
-        "minimum": 0.10, "maximum": 0.11, "count": 2}
+    body = {
+        **request_body(family),
+        "parameter": ("thickness_ratio" if family == "naca65" else "max_thickness_ratio"),
+        "minimum": 0.10,
+        "maximum": 0.11,
+        "count": 2,
+    }
     response = client.post("/api/workbench/batches", json=body)
     assert response.status_code == 202, response.text
     identifier = response.json()["job_id"]
@@ -134,11 +148,23 @@ def test_sweep_generates_distinct_parameterized_profiles(client, family):
 @pytest.mark.parametrize("family", ["custom", "naca65", "double_arc"])
 def test_geomturbo_export_roundtrips_each_family(client, family, tmp_path):
     identifier = client.post("/api/workbench/profiles", json=request_body(family)).json()[
-        "geometry_id"]
-    schedule = {"name": "blade", "blade_count": 12, "rotation_direction": "ccw",
-                "sections": [{"span_fraction": i, "radius_m": 0.2 + i * 0.1,
-                              "chord_m": 0.04, "stagger_deg": 30, "geometry_id": identifier}
-                             for i in range(2)]}
+        "geometry_id"
+    ]
+    schedule = {
+        "name": "blade",
+        "blade_count": 12,
+        "rotation_direction": "ccw",
+        "sections": [
+            {
+                "span_fraction": i,
+                "radius_m": 0.2 + i * 0.1,
+                "chord_m": 0.04,
+                "stagger_deg": 30,
+                "geometry_id": identifier,
+            }
+            for i in range(2)
+        ],
+    }
     response = client.post("/api/workbench/geomturbo", json=schedule)
     assert response.status_code == 200, response.text
     path = tmp_path / "blade.geomTurbo"
@@ -156,8 +182,13 @@ def test_invalid_generation_does_not_save(client):
     body["spec"]["trailing_edge_half_wedge_deg"] = 40
     assert client.post("/api/workbench/profiles", json=body).status_code == 422
     assert client.get("/api/workbench/profiles").json()["total"] == 0
-    body = {**request_body("naca65"), "parameter": "nonsense", "minimum": 0.1,
-            "maximum": 0.2, "count": 2}
+    body = {
+        **request_body("naca65"),
+        "parameter": "nonsense",
+        "minimum": 0.1,
+        "maximum": 0.2,
+        "count": 2,
+    }
     assert client.post("/api/workbench/batches", json=body).status_code == 422
 
 
@@ -174,14 +205,14 @@ def test_existing_workspace_is_browsable_and_deduplicated(client):
 
 
 def test_existing_formal_dataset_remains_browsable(client):
-    from cascade_forge.features import extract_features
-    from cascade_forge.geometry2d import generate_profile
-    from cascade_forge.validation import validate_profile
+    from cascade_forge.domain.features import extract_features
+    from cascade_forge.domain.geometry import generate_profile
+    from cascade_forge.domain.validation import validate_profile
 
     geometry = generate_profile(_default_spec_v2())
-    client.app.state.store_v2.append_geometries([
-        (geometry, extract_features(geometry), validate_profile(geometry), {"proposal_index": 0})
-    ])
+    client.app.state.store_v2.append_geometries(
+        [(geometry, extract_features(geometry), validate_profile(geometry), {"proposal_index": 0})]
+    )
     listing = client.get("/api/workbench/profiles?limit=1").json()
     assert listing["total"] == 1
     assert listing["items"][0]["geometry_id"] == geometry.geometry_id
@@ -192,11 +223,24 @@ def test_existing_formal_dataset_remains_browsable(client):
 
 
 def test_geomturbo_rejects_mixed_families_and_external_curves(client):
-    identifiers = [client.post("/api/workbench/profiles", json=request_body(family)).json()[
-        "geometry_id"] for family in ("naca65", "double_arc")]
-    schedule = {"name": "blade", "blade_count": 12, "sections": [
-        {"geometry_id": identifier, "span_fraction": i, "radius_m": 0.2 + i * 0.1,
-         "chord_m": 0.04, "stagger_deg": 0} for i, identifier in enumerate(identifiers)]}
+    identifiers = [
+        client.post("/api/workbench/profiles", json=request_body(family)).json()["geometry_id"]
+        for family in ("naca65", "double_arc")
+    ]
+    schedule = {
+        "name": "blade",
+        "blade_count": 12,
+        "sections": [
+            {
+                "geometry_id": identifier,
+                "span_fraction": i,
+                "radius_m": 0.2 + i * 0.1,
+                "chord_m": 0.04,
+                "stagger_deg": 0,
+            }
+            for i, identifier in enumerate(identifiers)
+        ],
+    }
     assert client.post("/api/workbench/geomturbo", json=schedule).status_code == 422
     schedule["sections"][1]["geometry_id"] = identifiers[0]
     schedule["hub_curve_path"] = "missing.dat"
@@ -205,12 +249,23 @@ def test_geomturbo_rejects_mixed_families_and_external_curves(client):
 
 def test_irregular_input_stations_are_preserved_without_resampling(client, tmp_path):
     identifier = client.post("/api/workbench/profiles", json=request_body("naca65")).json()[
-        "geometry_id"]
+        "geometry_id"
+    ]
     radii = [0.2, 0.21, 0.3]
-    schedule = {"name": "blade", "blade_count": 12, "sections": [
-        {"geometry_id": identifier, "span_fraction": span, "radius_m": radius,
-         "chord_m": 0.04, "stagger_deg": 0}
-        for span, radius in zip([0, 0.1, 1], radii, strict=True)]}
+    schedule = {
+        "name": "blade",
+        "blade_count": 12,
+        "sections": [
+            {
+                "geometry_id": identifier,
+                "span_fraction": span,
+                "radius_m": radius,
+                "chord_m": 0.04,
+                "stagger_deg": 0,
+            }
+            for span, radius in zip([0, 0.1, 1], radii, strict=True)
+        ],
+    }
     response = client.post("/api/workbench/geomturbo", json=schedule)
     assert response.status_code == 200
     path = tmp_path / "irregular.geomTurbo"
@@ -218,15 +273,16 @@ def test_irregular_input_stations_are_preserved_without_resampling(client, tmp_p
     parsed = parse_geomturbo(path)
     for side in ("suction", "pressure"):
         for section, radius in zip(parsed[side], radii, strict=True):
-            np.testing.assert_allclose(np.linalg.norm(section[:, :2], axis=1), radius,
-                                       atol=1e-13, rtol=0)
+            np.testing.assert_allclose(
+                np.linalg.norm(section[:, :2], axis=1), radius, atol=1e-13, rtol=0
+            )
 
 
-def test_three_entry_navigation_and_no_benchmark_controls(client):
+def test_eight_entry_navigation_and_no_benchmark_controls(client):
     home = client.get("/").text
     assert "自定义叶型" in home
     nav = home.split('<nav aria-label="日常设计">')[1].split("</nav>")[0]
-    assert nav.count('class="nav-item') == 3
+    assert nav.count('class="nav-item') == 8
     assert all(f'href="{path}"' in nav for path in ("/studio", "/standard", "/database"))
     assert "数据库维护" not in home
     standard = client.get("/standard").text
@@ -240,22 +296,22 @@ def test_generation_has_compact_canvas_and_switchable_right_rail(client):
     for path in ("/studio", "/standard"):
         page = client.get(path).text
         assert 'class="generation-layout"' in page
-        assert 'data-profile-rail' in page
+        assert "data-profile-rail" in page
         assert 'data-rail-tab="actions"' in page and 'data-rail-tab="saved"' in page
-        assert 'data-database-select' in page and 'data-database-scan' in page
+        assert "data-database-select" in page and "data-database-scan" in page
         assert "Spec JSON" not in page and 'name="explicit_spec"' not in page
     studio = client.get("/studio").text
-    assert 'data-import-spec' in studio and 'data-export-spec' in studio
-    assert 'data-save-workspace' in studio
-    assert '保存设计修订' not in studio
-    for markup in (studio, client.get('/standard').text):
-        primary = markup.split('data-profile-primary-actions>')[1].split('</div>')[0]
-        assert all(label in primary for label in ('保存叶型', '导出 CSV', '导出 DAT'))
-        assert 'data-profile-3d' not in primary and 'data-save-workspace' not in primary
-        assert 'data-output-more' in markup and 'data-database-management' in markup
-    assert 'data-geometry-issues' in studio and 'data-geometry-issue-list' in studio
-    assert 'data-analysis-interior' in studio and 'data-analysis-help' in studio
-    assert 'data-analysis-summary' in studio
+    assert "data-import-spec" in studio and "data-export-spec" in studio
+    assert "data-save-workspace" in studio
+    assert "保存设计修订" not in studio
+    for markup in (studio, client.get("/standard").text):
+        primary = markup.split("data-profile-primary-actions>")[1].split("</div>")[0]
+        assert all(label in primary for label in ("保存叶型", "导出 CSV", "导出 DAT"))
+        assert "data-profile-3d" not in primary and "data-save-workspace" not in primary
+        assert "data-output-more" in markup and "data-database-management" in markup
+    assert "data-geometry-issues" in studio and "data-geometry-issue-list" in studio
+    assert "data-analysis-interior" in studio and "data-analysis-help" in studio
+    assert "data-analysis-summary" in studio
 
 
 def test_database_has_scrollable_selector_and_four_image_comparison(client):
@@ -263,10 +319,13 @@ def test_database_has_scrollable_selector_and_four_image_comparison(client):
     assert page.status_code == 200
     assert 'class="surface-card library-sidebar"' in page.text
     assert 'aria-label="可滚动样本列表"' in page.text
-    assert 'data-library-charts' in page.text
-    assert 'data-library-clear' in page.text
+    assert "data-library-charts" in page.text
+    assert "data-library-clear" in page.text
     assert "最多 4 个" in page.text
-    assert '<table' not in page.text
-    for asset in ("/static/profile-database.js?v=4", "/static/profile-database.css?v=3"):
+    assert "<table" not in page.text
+    for asset in (
+        "/static/profile-database.js?v=3.1-layered",
+        "/static/profile-database.css?v=3.1-layered",
+    ):
         assert asset in page.text
         assert client.get(asset).status_code == 200
