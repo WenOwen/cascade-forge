@@ -5,16 +5,18 @@
 .library-sidebar .field-help { font-size: 12px; margin-bottom: 12px; }
 .library-error { color: var(--danger); overflow-wrap: anywhere; margin: 0 0 10px; }
 .library-error:empty { display: none; }
-.library-samples { min-height: 140px; overflow-y: auto; overscroll-behavior: contain; flex: 1; display: grid; align-content: start; gap: 10px; padding: 2px 6px 2px 2px; scrollbar-gutter: stable; }
-.library-sample { display: grid; grid-template-columns: 20px minmax(0, 1fr) 30px; align-items: center; gap: 8px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface); padding: 11px 10px; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+.library-samples { min-height: 140px; overflow-y: auto; overscroll-behavior: contain; flex: 1; display: grid; align-content: start; gap: 8px; padding: 2px 6px 2px 2px; scrollbar-gutter: stable; }
+.library-sample { display: grid; grid-template-columns: 20px minmax(0, 1fr) 30px; align-items: center; gap: 6px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); padding: 8px 10px; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
 .library-sample:hover { border-color: var(--blue); background: #f5f9fd; }
 .library-sample.active { border-color: var(--blue); background: #e9f2fc; box-shadow: 0 0 0 1px var(--blue) inset; }
 .library-sample.checked { box-shadow: inset 3px 0 var(--blue); }
 .library-sample.active.checked { box-shadow: 0 0 0 1px var(--blue) inset, inset 3px 0 var(--blue); }
 .library-sample input { width: 16px; height: 16px; margin: 0; accent-color: var(--blue); cursor: pointer; }
-.library-sample-button { min-width: 0; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; display: grid; gap: 5px; align-content: center; }
-.library-sample-button strong { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
-.library-sample-button small { color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.library-sample-button { min-width: 0; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; display: grid; gap: 4px; align-content: center; }
+.library-sample-button strong { font-size: 12px; font-weight: 500; line-height: 1.4; letter-spacing: -0.005em; overflow-wrap: anywhere; }
+.library-sample-button small { color: var(--muted); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.library-sample .geometry-id { max-height: 0; opacity: 0; margin-top: 0; overflow: hidden; transition: max-height 160ms ease, opacity 160ms ease, margin 160ms ease; }
+.library-sample:hover .geometry-id, .library-sample:focus-within .geometry-id, .library-sample.active .geometry-id { max-height: 32px; opacity: 1; margin-top: 2px; }
 .library-sample-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 .library-sidebar .pagination { margin-top: 14px; gap: 6px; font-size: 12px; }
 .library-sidebar .pagination .button { padding: 6px 8px; }
