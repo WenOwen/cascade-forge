@@ -1,4 +1,4 @@
-.generation-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.generation-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr) 420px; gap: 12px; align-items: start; }
 .generation-layout > .studio-main { min-width: 0; }
 .plotly-chart { background: #edf4fb; border: 1px solid #d7e4f0; border-radius: 10px; }
 .generation-layout .profile-frame { height: 420px; }
@@ -16,7 +16,7 @@
 .analysis-controls { margin: 10px 0; font-size: 12px; }
 .analysis-help { margin: 14px 0 0; padding: 12px; border: 1px solid #d7e4f0; border-radius: 8px; background: #f3f7fb; font-size: 12px; line-height: 1.8; }
 .generation-layout .geometry-meta, .generation-layout [data-standard-id] { overflow-wrap: anywhere; font-size: 11px; }
-.profile-rail { min-width: 0; position: sticky; top: 16px; max-height: calc(100dvh - 150px); overflow-y: auto; padding: 16px; scrollbar-gutter: stable; }
+.profile-rail { min-width: 0; position: sticky; top: 16px; max-height: calc(100dvh - 150px); overflow-y: auto; padding: 12px; scrollbar-gutter: stable; }
 .database-picker { display: grid; gap: 10px; margin-bottom: 16px; }
 .database-picker .field-help { margin: 0; font-size: 11px; white-space: pre-wrap; }
 .database-path { overflow-wrap: anywhere; }
@@ -45,12 +45,16 @@
 .profile-rail [data-sweep-form] { display: grid; grid-template-columns: 1fr; }
 .profile-rail [data-sweep-status], .profile-rail [data-rail-status] { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .profile-rail [data-rail-panel="saved"] { display: grid; gap: 12px; }
-.rail-saved-list { display: grid; gap: 10px; }
-.rail-saved-card { display: grid; gap: 6px; border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px; }
-.rail-saved-card strong { font-size: 13px; }
-.rail-saved-card small { color: var(--muted); overflow-wrap: anywhere; font-size: 11px; }
+.rail-saved-list { display: grid; gap: 8px; }
+.rail-saved-card { display: grid; gap: 4px; border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; min-width: 0; }
+.rail-saved-card:hover, .rail-saved-card:focus-visible { border-color: var(--blue); background: #f3f7fb; box-shadow: 0 0 0 1px var(--blue) inset; outline: none; }
+.rail-saved-card.is-loading { opacity: 0.6; pointer-events: none; }
+.rail-saved-card strong { display: block; font-size: 12px; line-height: 1.4; font-weight: 500; letter-spacing: -0.005em; min-width: 0; }
+.rail-saved-card small { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; min-width: 0; }
+.rail-saved-card .geometry-id { font-size: 10px; color: var(--muted); background: transparent; padding: 0; border: 0; max-height: 0; opacity: 0; overflow: hidden; transition: max-height 160ms ease, opacity 160ms ease, margin 160ms ease; margin-top: 0; overflow-wrap: anywhere; }
+.rail-saved-card:hover .geometry-id, .rail-saved-card:focus-visible .geometry-id { max-height: 32px; opacity: 1; margin-top: 2px; }
 .profile-rail .pagination { gap: 6px; font-size: 12px; margin-top: 0; }
 .profile-rail .button { white-space: nowrap; }
-@media (max-width: 1280px) { .generation-layout { grid-template-columns: 220px minmax(0, 1fr) 250px; gap: 12px; } }
-@media (max-width: 1100px) { .generation-layout { grid-template-columns: minmax(0, 1fr) 270px; } .generation-layout > .inspector { grid-column: 1; position: static; max-height: none; } .generation-layout > .studio-main { grid-column: 1; } .generation-layout > .profile-rail { grid-column: 2; grid-row: 1 / span 2; } }
+@media (max-width: 1280px) { .generation-layout { grid-template-columns: 260px minmax(0, 1fr) 400px; gap: 10px; } }
+@media (max-width: 1100px) { .generation-layout { grid-template-columns: minmax(0, 1fr) 380px; gap: 10px; } .generation-layout > .inspector { grid-column: 1; position: static; max-height: none; } .generation-layout > .studio-main { grid-column: 1; } .generation-layout > .profile-rail { grid-column: 2; grid-row: 1 / span 2; } }
 @media (max-width: 760px) { .generation-layout { grid-template-columns: minmax(0, 1fr); } .generation-layout > .profile-rail { grid-column: 1; grid-row: auto; position: static; max-height: none; } .generation-layout .profile-frame { height: 320px; } }

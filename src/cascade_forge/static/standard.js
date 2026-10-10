@@ -67,5 +67,16 @@
       await showRecord(record); return true;
     }};
     syncNaca(); output.setReady(false);
+    const requested = new URLSearchParams(location.search).get("geometry_id");
+    if (requested) {
+      (async () => {
+        state.textContent = "正在打开…";
+        try {
+          const record = await (await window.CFOutput.request("/api/workbench/profiles/" + encodeURIComponent(requested))).json();
+          if (!["naca65", "double_arc"].includes(record.family)) {state.textContent = "该样本不是标准叶型，无法在此编辑。"; return;}
+          await window.CFStandard.loadRecord(record);
+        } catch (exc) { state.textContent = "无法打开样本：" + exc.message; }
+      })();
+    }
   });
 })();

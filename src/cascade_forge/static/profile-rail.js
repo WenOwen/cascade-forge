@@ -26,20 +26,26 @@
         next = workspace ? data.items.length > pageSize : offset + pageSize < data.total; list.replaceChildren();
         for (const item of data.items.slice(0, pageSize)) {
           const card = document.createElement("article"); card.className = "rail-saved-card";
+          card.setAttribute("role", "button"); card.setAttribute("tabindex", "0");
+          card.title = item.geometry_id || "";
           const name = document.createElement("strong"); name.textContent = item.label || item.name;
           const id = document.createElement("small"); id.textContent = workspace ? `修订 ${item.revision}` : ({custom: "自定义叶型", naca65: "NACA65", double_arc: "双圆弧", imported: "DAT 导入"}[item.family] || "已保存截面");
-          const button = document.createElement("button"); button.type = "button"; button.className = "button"; button.textContent = "打开叶型";
-          button.addEventListener("click", async () => {
-            const version = token; button.disabled = true;
+          const identifier = document.createElement("code"); identifier.className = "geometry-id"; identifier.textContent = item.geometry_id;
+          const load = async () => {
+            const version = token; card.classList.add("is-loading");
             try {
               const record = await (await window.CFOutput.request(workspace ? `/api/v2/workspace/designs/${item.design_id}` : `/api/workbench/profiles/${item.geometry_id}`)).json();
               if (version !== token) return;
-              if (record.family === "imported" || (window.CFStudio && record.family && record.family !== "custom")) {location.href = `/database?search=${encodeURIComponent(item.geometry_id)}&database=${encodeURIComponent(window.CFDatabase.name)}`; return;}
-              const opened = window.CFStudio ? await window.CFStudio.loadDesign(workspace ? record : {name: record.name, spec: record.spec}) : await window.CFStandard.loadRecord(record);
-              if (opened !== false) switchTab("actions");
-            } catch (error) {status.textContent = error.message;} finally {button.disabled = false;}
-          });
-          const identifier = document.createElement("code"); identifier.className = "geometry-id"; identifier.textContent = item.geometry_id; card.append(name, id, identifier, button); list.append(card);
+              if (record.family === "imported") {location.href = `/database?search=${encodeURIComponent(item.geometry_id)}&database=${encodeURIComponent(window.CFDatabase.name)}`; return;}
+              if (["naca65", "double_arc"].includes(record.family)) {location.href = `/standard?geometry_id=${encodeURIComponent(item.geometry_id)}`; return;}
+              if (window.CFStudio) {await window.CFStudio.loadDesign(workspace ? record : {name: record.name, spec: record.spec}); return;}
+              if (window.CFStandard) {await window.CFStandard.loadRecord(record); return;}
+              status.textContent = "当前页面无法打开该样本。";
+            } catch (error) {status.textContent = error.message;} finally {card.classList.remove("is-loading");}
+          };
+          card.addEventListener("click", load);
+          card.addEventListener("keydown", event => {if (event.key === "Enter" || event.key === " ") {event.preventDefault(); load();}});
+          card.append(name, id, identifier); list.append(card);
         }
         status.textContent = data.items.length ? "点击样本可继续编辑或导出。" : "暂无保存记录。";
         root.querySelector("[data-rail-page]").textContent = `第 ${offset / pageSize + 1} 页`;
