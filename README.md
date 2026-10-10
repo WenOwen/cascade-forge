@@ -15,28 +15,23 @@ uv sync --extra dev
 默认地址：<http://127.0.0.1:8000>。启动器从自身位置解析根目录，无须进入其他子目录。
 
 ```powershell
-uv run cascade-forge serve --dataset datasets/geometry-v2.1.0 --workspace datasets/workspace-v2 --naca65-dataset datasets/naca65-compressor-benchmark-v1.0.0 --databases databases
+uv run cascade-forge serve --dataset datasets/geometry-v2.1.0 --workspace datasets/workspace-v2 --databases databases
 uv run pytest
 uv run ruff check src tests
 uv build
 ```
 
-CLI 顶层仅保留 `serve / naca65 / arc`，各标准叶型子命令见 `--help`。通用叶型生成、参数扫描和三维叶片构造通过 Web/Python API 使用，不再提供旧顶层 CLI。
+CLI 顶层仅保留 `serve / naca65 / arc`，各标准叶型子命令见 `--help`。通用叶型生成、参数扫描和样本三维导出通过 Web 工作台使用，不再提供旧顶层 CLI。
 
 ## 页面与操作
 
-导航保留八页：
+日常导航只保留三页：
 
 | 页面 | 用途 |
 |---|---|
 | `/studio` | 自定义 B-spline G2 叶型，实时预览、参数导入/导出、历史快照 |
 | `/standard` | 原生 NACA65 与双圆弧，直接生成、不强制拟合 |
 | `/database` | 命名数据库、DAT 扫描、样本预览、最多四样本并排比较、删除与导出 |
-| `/naca65` | NACA65/65A/压气机专项、法向分解、拟合基准与 IGG 坐标导出 |
-| `/arc` | 单圆弧、双圆弧、多圆弧及厚度/楔角可行域 |
-| `/compare` | 正式 v2 叶型叠加与特征差值 |
-| `/cascade` | 正式 v2 叶型的叶栅排列和几何干涉检查 |
-| `/blade` | 正式 v2 截面的展向组合与 GeomTurbo 导出 |
 
 生成页采用参数—画布—操作栏布局。保存到当前数据库后，可从已保存列表重新打开。工作区历史快照独立保存，仍支持 Web 导入/导出与修订。
 
@@ -44,7 +39,7 @@ CLI 顶层仅保留 `serve / naca65 / arc`，各标准叶型子命令见 `--help
 
 垃圾桶按钮需要确认。删除是**当前数据库内的逻辑删除**：预览、列表及数据库 ZIP 不再包含该样本，重启或重新扫描不会复活。原始 DAT、CSV、JSON、正式 Parquet 数据和工作区历史保留；重新显式保存同一原生叶型可以恢复样本。数据库之间的删除互不影响。
 
-默认数据库同时可浏览已有正式 v2 几何与工作区截面；对这些样本的删除只隐藏数据库浏览副本，不破坏设计历史和正式数据。其他命名数据库只显示自身样本。专项 compare/cascade/blade 仍使用正式 v2 数据；命名库样本的比较与三维导出在 database 页完成。
+默认数据库同时可浏览已有正式 v2 几何与工作区截面；对这些样本的删除只隐藏数据库浏览副本，不破坏设计历史和正式数据。其他命名数据库只显示自身样本。样本并排比较与同系列三维导出在 database 页完成，不再另设比较、叶栅或三维叶片页面。
 
 ## 工程布局
 
@@ -59,7 +54,7 @@ cascade-forge/
 │   ├── pages/        # 页面路由、默认参数与模板上下文
 │   ├── workbench/    # 原生生成、参数扫描配置、预览载荷、NACA65 基准编排
 │   ├── static/       # 本地 JavaScript/CSS/HTMX
-│   └── templates/    # 八页模板与共享组件
+│   └── templates/    # 三页模板与共享组件
 ├── tests/            # 单元/集成/API；browser/ 为浏览器回归脚本
 ├── docs/             # 数学合同与使用说明
 ├── databases/        # 用户命名库（不提交）
@@ -82,3 +77,5 @@ cascade-forge/
 详情：[圆弧合同](docs/circular-arc-profiles.md)、[NACA65 压气机](docs/naca65-compressor.md)、[操作流程](docs/simple-workflow.md)、[设计系统](design-system.md)。
 
 旧 v1 通用解析模型、NASA 48 锚点、锚点拟合门禁、批量 Sobol 建库、运维页和 `/api/v1/*` 已移除；历史 profile-library-v1 不再暴露。保留标准族文档中的历史数学对照不意味着保留旧实现。
+
+NACA65 专项、圆弧专项、叶型比较、叶栅检查、三维叶片五页及独占 HTTP 接口已移除。标准页仍提供 NACA65／双圆弧生成和圆弧可行域检查；独立标准族、拟合、基准、叶片构造与格式模块保留，原有基准数据不会因 Web 启动而改写。NACA65 专用拟合/IGG 导出和单圆弧/多圆弧通过 Python／CLI 使用。

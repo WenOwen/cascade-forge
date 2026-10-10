@@ -467,20 +467,11 @@ geometry.diagnostics      # 全部不变量
 
 ### Web
 
-侧栏「圆弧族实验室」（`/arc`）。页面提供族选择、闭合方式、金属角、厚度、楔角与采样
-点数控件，**参数变化时实时查询可行域**并把楔角滑动条与切点站位滑动条的上下限收敛到
-真实可达区间；右侧显示轮廓、各段圆弧（含圆心与半径）、法向厚度连线、可行域卡片、
-全部解析不变量、几何特征与圆弧节点表。参数不合法时错误信息按字段路径逐条展开
-（Pydantic 的 `detail` 是数组，不能直接当字符串渲染）。
-
-API：
-
-* `POST /api/v2/arc/generate` — 由 `ArcProfileSpec` 返回完整几何；
-* `POST /api/v2/arc/limits` — 返回 `arc_feasibility_report` 的全部字段：可行楔角上界、
-  切点可达站位区间与切线角区间、多圆弧内节点站位可达区间、中弧线弧长与尾缘曲率、
-  前缘半径的标称值与真实值。不适用于当前族的字段返回 `null`，不伪造数值。
-
-不可行参数返回 `422` 与可读的中文原因。
+标准页 `/standard` 保留双圆弧生成和可行域控件；独立圆弧专项页已移除。
+`POST /api/workbench/preview` 使用 `family="double_arc"` 和圆弧 spec 返回原生几何。
+`POST /api/v2/arc/limits` 为标准页返回楔角上界、切点可达范围、中弧线弧长与尾缘曲率。
+不可行输入返回 422；单圆弧、多圆弧和更完整诊断继续通过独立 Python 模块／CLI 使用，
+不再提供专项生成 HTTP 接口。
 
 ## 7. 验收准则
 
@@ -508,7 +499,7 @@ API：
 三点外接圆那一行的门槛之所以比解析外推宽：折线曲率估计在 `s → 0` 处只有 `O(√s)`
 收敛，`5×10⁻⁵` 是该方法本身的分辨率，不是实现误差。两行不能用同一个门槛。
 
-全部由 `tests/test_circular_arc.py`（86 项）与 `tests/test_arc_integration.py`（18 项）
+由 `tests/test_circular_arc.py` 与 `tests/test_arc_integration.py`
 固化。
 
 ## 8. 已知限制

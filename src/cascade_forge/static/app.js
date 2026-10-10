@@ -47,15 +47,7 @@
   function debounce(fn, wait) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; }
   function downloadJSON(name, payload) { const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = name; link.click(); URL.revokeObjectURL(link.href); }
   function escapeHTML(value) { return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
-  function statusPill(status) { return `<span class="pill ${escapeHTML(status)}">${escapeHTML(status)}</span>`; }
   function xy(points) { return { x: points.map(p => p[0]), y: points.map(p => p[1]) }; }
-  async function pollJob(jobId, callback) {
-    for (;;) {
-      const job = await fetchJSON(`/api/v2/jobs/${encodeURIComponent(jobId)}`); callback?.(job);
-      if (["completed", "failed"].includes(job.status)) return job;
-      await new Promise(resolve => setTimeout(resolve, 900));
-    }
-  }
 
   function initShell() {
     const toggle = $("[data-sidebar-toggle]"); const scrim = $("[data-sidebar-scrim]");
@@ -383,84 +375,12 @@
   }
 
 
-  function initCompare() {
-    const root = $("[data-compare-root]"); if (!root) return;
-    const form = $("[data-compare-form]", root), input = form.elements.ids;
-    const button = $("button[type='submit']", form), exportButton = $("[data-export-comparison]", root);
-    const errorNode = $("[data-compare-error]", root), summary = $("[data-compare-summary]", root);
-    const body = $("[data-compare-body]", root);
-    let resultRows = [], sequence = 0;
-    const saved = sessionStorage.getItem("cf-compare"); if (saved) input.value = saved;
-    function clearResult() {
-      resultRows = []; exportButton.disabled = true; body.replaceChildren();
-      const chart = $("#compare-chart");
-      window.Plotly?.purge(chart); chart.replaceChildren(); chart.classList.add("empty-chart");
-    }
-    input.addEventListener("input", () => {
-      sequence++; button.disabled = false; button.textContent = "叠加比较";
-      root.setAttribute("aria-busy", "false"); clearResult();
-      errorNode.hidden = true; summary.textContent = "输入已修改，请重新比较";
-    });
-    form.addEventListener("submit", async event => {
-      event.preventDefault();
-      const current = ++sequence;
-      const ids = [...new Set(input.value.split(/[\s,，;；]+/).filter(Boolean))];
-      clearResult(); errorNode.hidden = true;
-      if (ids.length < 2 || ids.length > 12) {
-        errorNode.textContent = `请输入 2–12 个不同 Geometry ID，当前为 ${ids.length} 个。`;
-        errorNode.hidden = false; summary.textContent = "输入需要调整"; input.focus(); return;
-      }
-      input.value = ids.join("\n"); button.disabled = true; button.textContent = "正在比较…";
-      root.setAttribute("aria-busy", "true"); summary.textContent = `正在比较 ${ids.length} 个叶型…`;
-      try {
-        const data = await fetchJSON("/api/v2/compare", { method: "POST", body: JSON.stringify({ geometry_ids: ids }) });
-        if (current !== sequence) return;
-        const traces = [], palette = [colors.blue, colors.orange, colors.green, "#af52de", colors.red, "#008b8b", "#8b4513", "#5865b0", "#b03060", "#657800", "#007c91", "#7d5a50"];
-        data.items.forEach((g, index) => {
-          const color = palette[index];
-          traces.push({ ...xy(g.suction), name: `${index + 1} ${g.geometry_id} SS`, line: { color } }, { ...xy(g.pressure), name: `${index + 1} ${g.geometry_id} PS`, line: { color, dash: "dash" } });
-        });
-        await Charts.render("compare-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "y/c" }, xaxis: { title: "x/c" } });
-        if (current !== sequence) return;
-        const baseline = data.features[0];
-        resultRows = data.features.map((f, index) => ({ ...f, baseline: index === 0, delta_thickness: f.max_thickness_ratio - baseline.max_thickness_ratio, delta_position: f.max_thickness_x_ratio - baseline.max_thickness_x_ratio, delta_camber: f.max_camber_ratio - baseline.max_camber_ratio }));
-        const signed = value => `${value > 0 ? "+" : ""}${value.toFixed(6)}`;
-        body.innerHTML = resultRows.map(f => `<tr><td><code>${escapeHTML(f.geometry_id)}</code>${f.baseline ? "（基准）" : ""}</td><td>${escapeHTML(f.kernel)}</td><td>${f.max_thickness_ratio.toFixed(5)}</td><td>${f.max_thickness_x_ratio.toFixed(5)}</td><td>${f.max_camber_ratio.toFixed(5)}</td><td>${f.leading_edge_radius_ratio.toExponential(3)}</td><td>${f.trailing_edge_radius_ratio.toExponential(3)}</td><td>${signed(f.delta_thickness)}</td><td>${signed(f.delta_position)}</td><td>${signed(f.delta_camber)}</td></tr>`).join("");
-        summary.textContent = `已比较 ${ids.length} 个叶型 · 基准：${ids[0]}`;
-        sessionStorage.setItem("cf-compare", ids.join("\n")); exportButton.disabled = false;
-      } catch (error) {
-        if (current !== sequence) return;
-        clearResult(); errorNode.textContent = `比较失败：${error.message}`;
-        errorNode.hidden = false; summary.textContent = "请检查 ID 或网络后重新提交";
-      } finally {
-        if (current === sequence) { button.disabled = false; button.textContent = "叠加比较"; root.setAttribute("aria-busy", "false"); }
-      }
-    });
-    exportButton.addEventListener("click", () => {
-      const columns = ["geometry_id", "baseline", "kernel", "max_thickness_ratio", "max_thickness_x_ratio", "max_camber_ratio", "leading_edge_radius_ratio", "trailing_edge_radius_ratio", "delta_thickness", "delta_position", "delta_camber"];
-      const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
-      const csv = [columns.join(","), ...resultRows.map(row => columns.map(key => quote(row[key])).join(","))].join("\r\n");
-      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
-      const link = document.createElement("a"); link.href = url; link.download = "geometry-comparison.csv";
-      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-    if (saved) form.requestSubmit();
-  }
-
-  function initCascade() {
-    const form = $("[data-cascade-form]"); if (!form) return; const linkedId = new URLSearchParams(location.search).get("geometry_id"); if (linkedId) form.elements.geometry_id.value = linkedId; const range = form.elements.solidity; range.addEventListener("input", () => $("output[data-for='solidity']").textContent = Number(range.value).toFixed(2)); form.addEventListener("submit", async event => { event.preventDefault(); try { const data = await fetchJSON("/api/v2/cascade", { method: "POST", body: JSON.stringify({ geometry_id: form.elements.geometry_id.value.trim(), solidity: Number(range.value) }) }); const traces = []; data.passages.forEach((passage, index) => { traces.push({ ...xy(passage.suction), name: `SS ${passage.offset}`, line: { color: index === 1 ? colors.blue : "#b7b7bc" } }, { ...xy(passage.pressure), name: `PS ${passage.offset}`, line: { color: index === 1 ? colors.orange : "#d0d0d4" } }); }); Charts.render("cascade-chart", traces, { yaxis: { scaleanchor: "x", scaleratio: 1, title: "节距方向 y/c" }, xaxis: { title: "x/c" }, showlegend: false }); $("[data-cascade-summary]").innerHTML = `<dl class="definition-grid"><dt>状态</dt><dd>${statusPill(data.validation.status)}</dd><dt>节距 c</dt><dd>${data.pitch_ratio.toFixed(5)}</dd><dt>喉道代理</dt><dd>${Number(data.validation.metrics.cascade_throat_proxy_ratio).toFixed(5)}</dd></dl>`; } catch (error) { notice(error.message, true); } });
-  }
-
-
-  function initBlade() {
-    const root = $("[data-blade-root]"); if (!root) return; const editor = $("[data-section-editor]"); const template = $("#section-row-template");
-    function add(values = {}) { const fragment = template.content.cloneNode(true); const row = $(".section-row", fragment); Object.entries(values).forEach(([key, value]) => { if (row.querySelector(`[name='${key}']`)) row.querySelector(`[name='${key}']`).value = value; }); row.querySelector("[data-remove-section]").addEventListener("click", () => row.remove()); editor.appendChild(fragment); }
-    add({ span_fraction: 0, radius_m: .2, chord_m: .04, stagger_deg: 30 }); add({ span_fraction: 1, radius_m: .3, chord_m: .03, stagger_deg: 25 }); $("[data-add-section]").addEventListener("click", () => add());
-    $("[data-blade-form]").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget; const sections = $$(".section-row", editor).map(row => { const value = name => row.querySelector(`[name='${name}']`).value; return { span_fraction: Number(value("span_fraction")), radius_m: Number(value("radius_m")), chord_m: Number(value("chord_m")), geometry_id: value("geometry_id"), stagger_deg: Number(value("stagger_deg")), axial_offset_m: 0, tangential_offset_m: 0, lean_m: Number(value("lean_m")), sweep_m: Number(value("sweep_m")) }; }); const schedule = { name: form.elements.name.value, blade_count: Number(form.elements.blade_count.value), rotation_direction: form.elements.rotation_direction.value, sections, output_section_count: Number(form.elements.output_section_count.value), units: "m" }; try { const preview = await fetchJSON("/api/v2/blades/preview", { method: "POST", body: JSON.stringify(schedule) }); const traces = []; preview.sections.forEach((section, index) => ["suction_xyz", "pressure_xyz"].forEach((side, sideIndex) => { const points = section[side]; traces.push({ type: "scatter3d", mode: "lines", x: points.map(p => p[0]), y: points.map(p => p[1]), z: points.map(p => p[2]), name: `${index + 1} ${sideIndex ? "PS" : "SS"}`, line: { color: sideIndex ? colors.orange : colors.blue, width: 3 }, showlegend: index === 0 }); })); Charts.render("blade-chart", traces, { scene: { aspectmode: "data", xaxis: { title: "X / m" }, yaxis: { title: "Y / m" }, zaxis: { title: "Z / m" } }, margin: { l: 0, r: 0, t: 12, b: 0 } }); const queued = await fetchJSON("/api/v2/blades", { method: "POST", body: JSON.stringify(schedule) }); const summary = $("[data-blade-job]"); const job = await pollJob(queued.job_id, value => summary.textContent = `Job ${value.status}…`); if (job.status === "failed") throw new Error(job.error); summary.innerHTML = `已生成 <code>${escapeHTML(job.result.blade_id)}</code> · <a href="/api/v2/artifacts/${encodeURI(job.result.artifact)}">下载 GeomTurbo</a>`; } catch (error) { notice(error.message, true); } });
-  }
 
 
 
 
-  document.addEventListener("DOMContentLoaded", () => { initShell(); initStudio(); initCompare(); initCascade(); initBlade(); });
+
+
+
+  document.addEventListener("DOMContentLoaded", () => { initShell(); initStudio(); });
 })();

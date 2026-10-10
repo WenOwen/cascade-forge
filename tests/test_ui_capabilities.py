@@ -20,17 +20,13 @@ def test_every_public_workflow_has_a_ui_api_mapping(tmp_path) -> None:
         "workspace_save_import_export",
         "database_query_export",
         "compare_profiles",
-        "validate_cascade",
         "build_blade",
         "export_geomturbo",
         "jobs_and_artifacts",
         "generate_naca65",
-        "fit_naca65",
-        "benchmark_naca65",
-        "export_naca65",
         "delete_database_sample",
         "profile_parameter_sweep",
-        "generate_arc",
+        "standard_arc_limits",
     }
     assert set(mapping["capabilities"]) == expected
     with TestClient(
@@ -52,16 +48,17 @@ def test_workbench_has_no_external_cdn_and_exposes_all_pages() -> None:
         for path in (ROOT / "src" / "cascade_forge" / "templates").rglob("*.html")
     )
     assert "cdn." not in templates.lower()
-    for label in (
-        "自定义叶型",
-        "标准叶型",
-        "数据库浏览",
-        "NACA65 专项",
-        "圆弧专项",
-        "叶型比较",
-        "叶栅检查",
-        "三维叶片",
-    ):
+    for label in ("自定义叶型", "标准叶型", "数据库浏览"):
         assert label in templates
-    for route in ("/anchors", "/datasets", "/audit", "/jobs"):
+    for route in (
+        "/anchors",
+        "/datasets",
+        "/audit",
+        "/jobs",
+        "/naca65",
+        "/arc",
+        "/compare",
+        "/cascade",
+        "/blade",
+    ):
         assert f'href="{route}"' not in templates

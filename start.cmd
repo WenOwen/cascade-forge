@@ -27,7 +27,6 @@ echo.
 "%PYTHON_EXE%" -m cascade_forge.cli serve ^
     --dataset "datasets/geometry-v2.1.0" ^
     --workspace "datasets/workspace-v2" ^
-    --naca65-dataset "datasets/naca65-compressor-benchmark-v1.0.0" ^
     --databases "databases" ^
     --host "127.0.0.1" ^
     --port "%PORT%"

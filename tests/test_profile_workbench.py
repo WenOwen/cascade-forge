@@ -278,11 +278,11 @@ def test_irregular_input_stations_are_preserved_without_resampling(client, tmp_p
             )
 
 
-def test_eight_entry_navigation_and_no_benchmark_controls(client):
+def test_three_entry_navigation_and_no_benchmark_controls(client):
     home = client.get("/").text
     assert "自定义叶型" in home
     nav = home.split('<nav aria-label="日常设计">')[1].split("</nav>")[0]
-    assert nav.count('class="nav-item') == 8
+    assert nav.count('class="nav-item') == 3
     assert all(f'href="{path}"' in nav for path in ("/studio", "/standard", "/database"))
     assert "数据库维护" not in home
     standard = client.get("/standard").text
@@ -324,8 +324,8 @@ def test_database_has_scrollable_selector_and_four_image_comparison(client):
     assert "最多 4 个" in page.text
     assert "<table" not in page.text
     for asset in (
-        "/static/profile-database.js?v=3.1-layered",
-        "/static/profile-database.css?v=3.1-layered",
+        "/static/profile-database.js?v=3.2-three-pages",
+        "/static/profile-database.css?v=3.2-three-pages",
     ):
         assert asset in page.text
         assert client.get(asset).status_code == 200

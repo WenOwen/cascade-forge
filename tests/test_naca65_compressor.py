@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from cascade_forge.api.app import create_app
 from cascade_forge.domain.fitting_naca65 import fit_reference_geometry
 from cascade_forge.domain.models_naca65 import NACA65BenchmarkConfig, NACA65Spec, NACA65SplineSpec
 from cascade_forge.domain.naca65 import generate_naca65
@@ -60,7 +58,7 @@ def test_compressor_round_cap_fit_and_reconstruction(spec):
     assert rebuilt.model_dump() == fitted.model_dump()
 
 
-def test_compressor_http_export_and_benchmark_resume(tmp_path):
+def test_compressor_storage_and_benchmark_resume(tmp_path):
     root = tmp_path / "compressor"
     config = NACA65BenchmarkConfig(
         compressor=True, thickness_ratios=(0.1,), design_lift_coefficients=(0.8,)
@@ -70,16 +68,10 @@ def test_compressor_http_export_and_benchmark_resume(tmp_path):
     assert first.total_cases == resumed.completed_cases == 1
     assert first.run_id == resumed.run_id
     assert "TR 1368" in first.source_provenance["source"]
-    with TestClient(create_app(tmp_path / "v1", naca65_dataset_root=root)) as client:
-        response = client.post("/api/v2/naca65/fit", json={"spec": {"family": "65-compressor"}})
-        assert response.status_code == 200, response.text
-        assert (
-            response.json()["fitted_geometry"]["edge_metrics"]["trailing_edge_radius_ratio"]
-            == 0.0015
-        )
-        fit_id = client.get("/api/v2/naca65/cases").json()["items"][0]["fit_id"]
-        exported = client.get(f"/api/v2/naca65/cases/{fit_id}/export?format=json").json()
-        assert exported["reference"]["spec"]["family"] == "65-compressor"
-        for format in ("csv", "parquet"):
-            response = client.get(f"/api/v2/naca65/cases/{fit_id}/export?format={format}")
-            assert response.status_code == 200 and response.content
+    from cascade_forge.storage.naca65 import NACA65BenchmarkStore
+
+    store = NACA65BenchmarkStore(root)
+    fit_id = store.list_cases()[0]["fit_id"]
+    case = store.get_case(fit_id)
+    assert case["reference"]["spec"]["family"] == "65-compressor"
+    assert case["fitted_geometry"]["edge_metrics"]["trailing_edge_radius_ratio"] == 0.0015

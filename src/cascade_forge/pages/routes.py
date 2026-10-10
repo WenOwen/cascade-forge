@@ -14,7 +14,6 @@ def register_routes(application):
     templates = state.templates
     store_v2 = state.store_v2
     workspace = state.workspace
-    naca65_store = state.naca65_store
 
     @application.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
@@ -39,42 +38,3 @@ def register_routes(application):
             "pages/database.html",
             _page_context("database", store_v2, workspace),
         )
-
-    @application.get("/compare", response_class=HTMLResponse)
-    def compare_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request,
-            "pages/compare.html",
-            _page_context("compare", store_v2, workspace),
-        )
-
-    @application.get("/cascade", response_class=HTMLResponse)
-    def cascade_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request,
-            "pages/cascade.html",
-            _page_context("cascade", store_v2, workspace),
-        )
-
-    @application.get("/naca65", response_class=HTMLResponse)
-    def naca65_page(request: Request) -> HTMLResponse:
-        context = _page_context("naca65", store_v2, workspace)
-        context["naca65_count"] = naca65_store.count()
-        context["naca65_manifest"] = naca65_store.latest_manifest()
-        return templates.TemplateResponse(request, "pages/naca65.html", context)
-
-    @application.get("/blade", response_class=HTMLResponse)
-    def blade_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request,
-            "pages/blade.html",
-            _page_context("blade", store_v2, workspace),
-        )
-
-    @application.get("/arc", response_class=HTMLResponse)
-    def arc_page(request: Request) -> HTMLResponse:
-        context = _page_context("arc", store_v2, workspace)
-        # 模板用服务端渲染的默认值（与 ArcProfileSpec 的默认合同保持一致），
-        # 页面首屏先调用 /api/v2/arc/limits 把可行域填进控件再生成。
-        context["default_arc_spec"] = default_double_arc_spec().model_dump(mode="json")
-        return templates.TemplateResponse(request, "pages/arc.html", context)

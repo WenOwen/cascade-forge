@@ -17,7 +17,7 @@
 
 压气机拟合使用独立版本 `naca65-compressor-bspline-v1`：五次中弧线与共享半厚度 `h(s)=sqrt(s)B(s)`，保留有限端厚，再对最后 5% 弦长应用相同的工程圆整。模型 JSON 保存半径、版本和全部 B-spline 控制参数，可重建坐标。主体法向不变量针对圆整前构造；圆弧与光顺不冒用该不变量。两侧圆整后采用独立弧长重采样，其数组同下标不代表相同法向站位。
 
-完整轮廓距离、自交检查、CSV/Parquet 导出均包含圆尾缘。JSON 还保存圆弧、圆心、接点、原始表格构造与来源。尾缘图默认放大到半径量级；法向连线只绘制 95% 弦长之前的主体站位。
+完整轮廓距离、自交检查、CSV/Parquet 导出均包含圆尾缘。JSON 还保存圆弧、圆心、接点、原始表格构造与来源。相关尾缘诊断继续由独立 Python 模块提供，专项可视化页面已移除。
 
 在项目根目录运行：
 
@@ -29,20 +29,20 @@
 .venv/Scripts/python.exe -m cascade_forge.cli naca65 generate --family 65 --loading-parameter-a 0.8
 ```
 
-API 使用 `{"family":"65-compressor","thickness_ratio":0.1,"design_lift_coefficient":0.8}`；a 默认 1，显式提交其他 a 会被拒绝。基准 API 使用 `{"compressor":true}`；未指定时保留旧 API 的 36 型行为。
+标准页通过 `POST /api/workbench/preview` 提交 `{"family":"naca65","spec":{"family":"65-compressor","thickness_ratio":0.1,"design_lift_coefficient":0.8}}`；a 默认 1，显式提交其他 a 会被拒绝。独立专项 HTTP 接口已移除；拟合和基准通过上述 CLI／Python 模块使用。
 
-新库 `datasets/naca65-compressor-benchmark-v1.0.0` 独立于旧 sixseries v3 库；启动脚本已经切换新库。存储/评估框架仍标记 `naca65-benchmark-3.0.0`，具体几何版本由各记录的 `algorithm_version` / `generator_version` 和 `config.compressor` 区分。恢复运行验证配置，避免把不同矩阵追加到同一库。
+新库 `datasets/naca65-compressor-benchmark-v1.0.0` 独立于旧 sixseries v3 库；Web 启动不再加载或改写任何 NACA65 基准库，CLI 使用显式 dataset/output 路径。存储/评估框架仍标记 `naca65-benchmark-3.0.0`，具体几何版本由各记录的 `algorithm_version` / `generator_version` 和 `config.compressor` 区分。恢复运行验证配置，避免把不同矩阵追加到同一库。
 
 ## 验证结果
 
 9 型矩阵：名义厚度 6%、10%、15%，设计升力系数 0、0.8、1.2，a=1。全部 valid，无自交；最大 RMS `1.472e-4c`，最大轮廓距离 `9.931e-4c`。默认 65-810：RMS `9.073e-5c`，最大距离 `5.491e-4c`。
 
-回归覆盖表格独立数值、有限端厚、圆弧几何半径、数值接点切线、完整轮廓自交、模型重建、API/导出、基准恢复及旧 36 型。另检查 t/c=0.03、0.18 且 Cl=2 的边界组合。这些是几何验证，未进行气动 CFD 验证。
+回归覆盖表格独立数值、有限端厚、圆弧几何半径、数值接点切线、完整轮廓自交、模型重建、标准页生成与 CLI/导出、基准恢复及旧 36 型。另检查 t/c=0.03、0.18 且 Cl=2 的边界组合。这些是几何验证，未进行气动 CFD 验证。
 
 
 ## IGG DAT 导出（2026-09-08）
 
-页面当前轮廓下方提供“导出 IGG DAT”，可选择原生或拟合轮廓。尚未拟合时只能导出原生轮廓；导出对象是当前已显示的轮廓，而非尚未点击生成的表单参数。基准案例表的 DAT 链接默认导出原生轮廓。
+IGG 专用 XYZ 曲线导出通过 CLI 选择原生或拟合轮廓。标准页和数据库页的普通 DAT 坐标导出继续保留，但不等同于此 IGG 专用格式。
 
 单文件为 IGG 简单曲线格式：曲线名称、`XYZ`、点数、逐行三列坐标。IGG 16.1 对这个格式只读一条曲线，不能通过直接串接两条记录导入两侧。因此本程序输出 **401 点闭合轮廓**，顺序为尾缘 → 吸力面 → 前缘 → 压力面 → 尾缘，前缘只记录一次，末点闭合到首点。保留圆尾缘轮廓，使用默认 C-spline 插值；它是坐标曲线交换，不是精确解析圆弧或 B-spline 参数交换。
 
@@ -53,14 +53,14 @@ API 使用 `{"family":"65-compressor","thickness_ratio":0.1,"design_lift_coeffic
 # 拟合轮廓：--source fitted
 ```
 
-已保存案例 API：`GET /api/v2/naca65/cases/{fit_id}/export?format=dat&source=native`（或 `fitted`）。当前未入库轮廓 API：`POST /api/v2/naca65/export/dat`，提交 `reference`、可选 `fitted_geometry` 和 `source`。
+独占专项 HTTP 导出接口已移除；Python 调用 `naca65_igg_dat` 或 `naca65_igg_split_zip` 也可导出未入库轮廓。
 
 本机 IGG 16.1 的 `import_data_file` 已分别导入原生与拟合 DAT，两条曲线各 401 控制点；逐点读回与导出坐标的最大差为 **0**。证据：`output/naca65-compressor/igg-dat-import-audit.json`、`igg-dat-import.py`、`igg-dat-import.log`。格式参考 NUMECA《IGG User Manual》的 Curve data files 节；实际兼容性以本机 16.1 导入为证。
 
 
 ## 精确定义前缘的拆分导出（2026-09-08）
 
-Web 当前轮廓与案例表各自提供“来源”和“组织方式”设置。组织方式默认“吸力面 / 压力面拆分（ZIP）”，也可选原有单条闭合 DAT。案例表链接会显示“原生·ZIP / 拟合·ZIP / 原生·DAT / 拟合·DAT”，与该表上方选项同步；当前图下的设置仅控制当前轮廓。
+CLI 的 `--source native/fitted` 选择来源，`--layout closed/split` 选择单条闭合 DAT 或两侧拆分 ZIP。此独立导出能力不依赖已移除的专项页面。
 
 拆分直接使用所选原生/拟合结果的两侧坐标数组，保留全部点，不重新拟合，不按最小 x 找前缘，也不硬编码闭合曲线的第 201 点。对目前 201 点/侧的型线，ZIP 包含：
 
@@ -75,6 +75,6 @@ CLI 拆分：
 .venv/Scripts/python.exe -m cascade_forge.cli naca65 export <fit_id> --dataset datasets/naca65-compressor-benchmark-v1.0.0 --destination output/65-810-fitted-split.zip --source fitted --layout split
 ```
 
-API 的原默认闭合导出保持兼容；拆分时在 POST 数据或案例 GET 查询中添加 `layout=split`，响应为 `application/zip`。CLI `--layout split` 要求目标扩展名 `.zip`。
+CLI `--layout split` 要求目标扩展名 `.zip`；默认 `closed` 保留单条闭合导出。
 
 实际 IGG 16.1 验证覆盖原生/拟合两种来源：共四条曲线各 201 点，定义前缘端点均精确为零，控制点逐点读回误差为零。样例及验证脚本、日志保存在 `output/naca65-compressor/split/`。

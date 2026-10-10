@@ -7,17 +7,10 @@ from typing import Any
 from fastapi import HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from cascade_forge.api.schemas import (
-    CascadeRequestV2,
-    CompareRequestV2,
-)
-from cascade_forge.domain.features import extract_features
 from cascade_forge.domain.geometry import generate_profile, resolve_geometry_spec
 from cascade_forge.domain.models import (
-    CascadeContext,
     GeometrySpecV2,
 )
-from cascade_forge.domain.validation import validate_profile
 from cascade_forge.workbench.geometry_payload import _geometry_payload
 
 
@@ -113,60 +106,4 @@ def register_routes(application):
         path = resolved_v2_root / "dataset_manifest.json"
         if not path.is_file():
             raise HTTPException(404, "v2 manifest 尚未生成")
-        return FileResponse(path, filename=path.name)
-
-    @application.post("/api/v2/compare")
-    def compare_v2(body: CompareRequestV2) -> dict[str, Any]:
-        geometries = []
-        for geometry_id in body.geometry_ids:
-            geometry = store_v2.get_geometry(geometry_id)
-            if geometry is None:
-                raise HTTPException(404, f"找不到 {geometry_id}")
-            geometries.append(geometry)
-        features = [extract_features(item) for item in geometries]
-        baseline = features[0]
-        return {
-            "items": [item.model_dump(mode="json") for item in geometries],
-            "features": [item.model_dump(mode="json") for item in features],
-            "deltas_from_first": [
-                {
-                    "geometry_id": item.geometry_id,
-                    "max_thickness_ratio": item.max_thickness_ratio - baseline.max_thickness_ratio,
-                    "max_thickness_x_ratio": item.max_thickness_x_ratio
-                    - baseline.max_thickness_x_ratio,
-                    "max_camber_ratio": item.max_camber_ratio - baseline.max_camber_ratio,
-                }
-                for item in features[1:]
-            ],
-        }
-
-    @application.post("/api/v2/cascade")
-    def cascade_v2(body: CascadeRequestV2) -> dict[str, Any]:
-        geometry = store_v2.get_geometry(body.geometry_id)
-        if geometry is None:
-            raise HTTPException(404, f"找不到 {body.geometry_id}")
-        report = validate_profile(geometry, CascadeContext(solidity=body.solidity))
-        suction, pressure, _, _ = geometry.arrays()
-        pitch = 1.0 / body.solidity
-        return {
-            "geometry_id": body.geometry_id,
-            "solidity": body.solidity,
-            "pitch_ratio": pitch,
-            "validation": report.model_dump(mode="json"),
-            "passages": [
-                {
-                    "offset": offset,
-                    "suction": (suction + [0.0, offset * pitch]).tolist(),
-                    "pressure": (pressure + [0.0, offset * pitch]).tolist(),
-                }
-                for offset in (-1, 0, 1)
-            ],
-        }
-
-    @application.get("/api/v2/artifacts/{artifact_path:path}")
-    def download_artifact_v2(artifact_path: str) -> FileResponse:
-        root = (resolved_v2_root / "artifacts").resolve()
-        path = (root / artifact_path).resolve()
-        if root not in path.parents or not path.is_file():
-            raise HTTPException(404, "制品不存在")
         return FileResponse(path, filename=path.name)

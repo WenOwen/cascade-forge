@@ -36,7 +36,6 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 def serve_command(
     dataset: Annotated[Path, typer.Option()],
     workspace: Annotated[Path | None, typer.Option()] = None,
-    naca65_dataset: Annotated[Path | None, typer.Option()] = None,
     databases: Annotated[Path | None, typer.Option()] = None,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8000,
@@ -49,7 +48,6 @@ def serve_command(
         create_app(
             dataset,
             workspace_root=workspace,
-            naca65_dataset_root=naca65_dataset,
             profile_database_root=databases or Path(__file__).resolve().parents[2] / "databases",
         ),
         host=host,

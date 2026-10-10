@@ -19,43 +19,27 @@ capabilities:
     ui: /database
     api: GET /api/workbench/profiles
   compare_profiles:
-    ui: /compare
-    api: POST /api/v2/compare
-  validate_cascade:
-    ui: /cascade
-    api: POST /api/v2/cascade
+    ui: /database
+    api: GET /api/workbench/profiles/{identifier}
   build_blade:
-    ui: /blade
-    api: POST /api/v2/blades
+    ui: /database
+    api: POST /api/workbench/geomturbo
   export_geomturbo:
-    ui: /blade
-    api: GET /api/v2/artifacts/{artifact_path}
+    ui: /database
+    api: POST /api/workbench/geomturbo
   jobs_and_artifacts:
-    ui: /blade
+    ui: /standard
     api: GET /api/v2/jobs/{job_id}
   generate_naca65:
-    ui: /naca65
-    api: POST /api/v2/naca65/generate
+    ui: /standard
+    api: POST /api/workbench/preview
     cli: naca65 generate
-  fit_naca65:
-    ui: /naca65
-    api: POST /api/v2/naca65/fit
-    cli: naca65 fit
-  benchmark_naca65:
-    ui: /naca65
-    api: POST /api/v2/naca65/benchmarks
-    cli: naca65 benchmark
-  export_naca65:
-    ui: /naca65
-    api: GET /api/v2/naca65/cases/{fit_id}/export
-    cli: naca65 export
   delete_database_sample:
     ui: /database
     api: DELETE /api/workbench/profiles/{identifier}
   profile_parameter_sweep:
     ui: /standard
     api: POST /api/workbench/batches
-  generate_arc:
-    ui: /arc
-    api: POST /api/v2/arc/generate
-    cli: arc generate
+  standard_arc_limits:
+    ui: /standard
+    api: POST /api/v2/arc/limits

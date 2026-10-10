@@ -43,6 +43,10 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     });
     await page.goto(`${base}/studio`, {waitUntil: 'networkidle'});
     await page.waitForFunction(() => document.querySelector('[data-preview-state]').textContent === '已同步');
+    assert.equal(await page.locator('.nav-item').count(), 3);
+    for (const path of ['/naca65', '/arc', '/compare', '/cascade', '/blade']) {
+      assert.equal((await page.request.get(`${base}${path}`)).status(), 404, path);
+    }
     assert.equal(await page.locator('textarea[name=explicit_spec]').count(), 0);
     assert.equal(await page.locator('[data-intent-id]').count(), 0);
     assert.equal(await page.locator('[data-geometry-id]').isVisible(), true);
@@ -110,6 +114,11 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     assert.equal(await page.locator('[data-rail-tab=saved]').getAttribute('aria-selected'), 'true');
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.locator('[data-rail-tab=actions]').getAttribute('aria-selected'), 'true');
+    await page.locator('[data-standard-family=double_arc]').click();
+    await page.locator('[data-standard-form] button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('[data-standard-state]').textContent === '已生成');
+    assert.match(await page.locator('[data-standard-limits]').textContent(), /半楔角上界：.*°/);
+    assert.match(await page.locator('[data-standard-name]').textContent(), /双圆弧/);
     for (const width of [1280, 1000, 800, 390]) {
       await page.setViewportSize({width, height: 844});
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, `overflow at ${width}`);

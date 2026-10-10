@@ -12,9 +12,6 @@ from typer.testing import CliRunner
 from cascade_forge.api.app import create_app
 from cascade_forge.cli import app
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-V1_DATASET = REPO_ROOT / "datasets" / "geometry-v1.0.0"
-
 
 def _base_spec() -> dict:
     return {
@@ -35,7 +32,10 @@ def _base_spec() -> dict:
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    return TestClient(create_app(str(tmp_path / "geometry-v1.0.0")))
+    with TestClient(
+        create_app(tmp_path / "geometry-v2", profile_database_root=tmp_path / "databases")
+    ) as client:
+        yield client
 
 
 def test_arc_cli_generates_all_three_families(tmp_path: Path) -> None:
@@ -114,29 +114,6 @@ def test_arc_cli_rejects_an_infeasible_wedge(tmp_path: Path) -> None:
     assert not destination.exists()
 
 
-def test_arc_web_page_and_offline_assets(client: TestClient) -> None:
-    page = client.get("/arc")
-    assert page.status_code == 200
-    assert "圆弧族实验室" in page.text
-    assert "data-arc-root" in page.text
-    script = client.get("/static/arc.js")
-    assert script.status_code == 200
-    assert "arc-profile-chart" in script.text
-
-
-def test_arc_web_generate_returns_the_closed_form_geometry(client: TestClient) -> None:
-    response = client.post("/api/v2/arc/generate", json=_base_spec())
-    assert response.status_code == 200
-    geometry = response.json()["geometry"]
-    assert geometry["features"]["arc_count"] == 2.0
-    assert geometry["features"]["trailing_edge_half_wedge_deg"] == pytest.approx(6.0, abs=1e-9)
-    assert geometry["diagnostics"]["chord_closure_error"] < 1e-12
-    assert geometry["diagnostics"]["node_tangency_error"] < 1e-14
-    assert len(geometry["suction"]) == len(geometry["pressure"]) == 201
-    assert geometry["profile_id"].startswith("arcgeo_")
-    assert geometry["mean_line_id"].startswith("arcml_")
-
-
 def test_arc_web_limits_matches_the_generator_ceiling(client: TestClient) -> None:
     """``/arc/limits`` 报的上界必须与**同一 spec** 的生成器真实上界一致。
 
@@ -158,52 +135,26 @@ def test_arc_web_limits_matches_the_generator_ceiling(client: TestClient) -> Non
 
     # 上界之下必须成功
     accepted = client.post(
-        "/api/v2/arc/generate",
-        json={**spec, "trailing_edge_half_wedge_deg": ceiling - 0.01},
+        "/api/workbench/preview",
+        json={
+            "family": "double_arc",
+            "spec": {**spec, "trailing_edge_half_wedge_deg": ceiling - 0.01},
+        },
     )
     assert accepted.status_code == 200, accepted.text
-    measured = accepted.json()["geometry"]["features"]["trailing_edge_half_wedge_deg"]
+    measured = accepted.json()["native_geometry"]["features"]["trailing_edge_half_wedge_deg"]
     assert measured == pytest.approx(ceiling - 0.01, abs=1e-3)
 
     # 上界之上必须被拒绝，并给出可达上界
     rejected = client.post(
-        "/api/v2/arc/generate",
-        json={**spec, "trailing_edge_half_wedge_deg": ceiling + 0.01},
+        "/api/workbench/preview",
+        json={
+            "family": "double_arc",
+            "spec": {**spec, "trailing_edge_half_wedge_deg": ceiling + 0.01},
+        },
     )
     assert rejected.status_code == 422
     assert "最大半楔角" in rejected.json()["detail"]
-
-
-def test_arc_web_reports_junction_station_outside_the_reachable_range(
-    client: TestClient,
-) -> None:
-    spec = _base_spec()
-    spec["mean_line"] = {
-        **spec["mean_line"],
-        "closure": "junction_station",
-        "junction_station": 0.95,
-    }
-    response = client.post("/api/v2/arc/generate", json=spec)
-    assert response.status_code == 422
-    # ArcMeanLineSpec 的合同校验在进入生成器之前就会拒绝，并给出可达区间。
-    payload = json.dumps(response.json(), ensure_ascii=False)
-    assert "可达区间" in payload
-
-
-def test_arc_web_supports_the_multiple_arc_family(client: TestClient) -> None:
-    spec = _base_spec()
-    spec["mean_line"] = {
-        "family": "multiple",
-        "inlet_metal_angle_deg": 25.0,
-        "outlet_metal_angle_deg": 25.0,
-        "interior_node_angles_deg": [12.5, 0.0, -12.5],
-        "interior_node_stations": [0.25607, 0.5],
-    }
-    response = client.post("/api/v2/arc/generate", json=spec)
-    assert response.status_code == 200, response.text
-    geometry = response.json()["geometry"]
-    assert geometry["features"]["arc_count"] == 4.0
-    assert geometry["diagnostics"]["node_tangency_error"] < 1e-14
 
 
 def test_double_arc_is_reachable_from_the_standard_workbench(client: TestClient) -> None:
@@ -218,81 +169,6 @@ def test_double_arc_is_reachable_from_the_standard_workbench(client: TestClient)
 # --------------------------------------------------------------------------------------
 # 界面真实路径的回归：旧集成测试恰好绕开了下面三条（2026-09-23）
 # --------------------------------------------------------------------------------------
-
-
-def test_arc_web_supports_multiple_arc_without_explicit_stations(client: TestClient) -> None:
-    """页面只发送内节点切线角；站位必须由后端自动求解。
-
-    旧版只有 CLI 做了这层回退，因此网页端的多圆弧 100% 报
-    「多圆弧需要 N-2 = 2 个内节点弦向站位，收到 0 个」——这正是 UI 的真实请求体。
-    """
-
-    spec = _base_spec()
-    spec["mean_line"] = {
-        "family": "multiple",
-        "inlet_metal_angle_deg": 25.0,
-        "outlet_metal_angle_deg": 25.0,
-        "interior_node_angles_deg": [12.5, 0.0, -12.5],
-    }
-    response = client.post("/api/v2/arc/generate", json=spec)
-    assert response.status_code == 200, response.text
-    geometry = response.json()["geometry"]
-    assert geometry["features"]["arc_count"] == 4.0
-    stations = geometry["spec"]["mean_line"]["interior_node_stations"]
-    assert len(stations) == 2
-    assert all(0.0 < value < 1.0 for value in stations)
-    # 回显的站位必须与节点表一致
-    assert geometry["node_stations"][1:3] == pytest.approx(stations)
-
-
-def test_arc_web_supports_the_double_arc_node_angle_closure(client: TestClient) -> None:
-    """双圆弧的 ``node_angles`` 闭合需要页面把切点角发过来。
-
-    旧版下拉里有这个选项，但输入框只在 ``family === "multiple"`` 时显示、buildSpec 也只在
-    multiple 分支发送该字段，于是这条路径在界面上永远拿不到那个角。
-    """
-
-    spec = _base_spec()
-    spec["mean_line"] = {
-        "family": "double",
-        "inlet_metal_angle_deg": 30.0,
-        "outlet_metal_angle_deg": 20.0,
-        "closure": "node_angles",
-        "interior_node_angles_deg": [10.0],
-    }
-    response = client.post("/api/v2/arc/generate", json=spec)
-    assert response.status_code == 200, response.text
-    geometry = response.json()["geometry"]
-    assert geometry["node_angles_deg"] == pytest.approx([30.0, 10.0, -20.0])
-
-    # 不发送切点角时必须是可读的 422，而不是未处理的 500
-    spec["mean_line"].pop("interior_node_angles_deg")
-    missing = client.post("/api/v2/arc/generate", json=spec)
-    assert missing.status_code == 422
-    assert "内节点切线角" in json.dumps(missing.json(), ensure_ascii=False)
-
-
-def test_arc_web_rejects_unequal_single_arc_angles_with_a_list_detail(
-    client: TestClient,
-) -> None:
-    """单圆弧两端角不等必须 422；``detail`` 是**数组**，前端必须逐条展开。
-
-    直接把数组赋给 ``textContent`` 会渲染成 ``[object Object]``——旧前端的真实缺陷。
-    这里固化「detail 是数组且含可读中文消息」这一契约，供前端归一化逻辑依赖。
-    """
-
-    spec = _base_spec()
-    spec["mean_line"] = {
-        "family": "single",
-        "inlet_metal_angle_deg": 30.0,
-        "outlet_metal_angle_deg": 40.0,
-        "closure": "max_camber",
-    }
-    response = client.post("/api/v2/arc/generate", json=spec)
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert isinstance(detail, list) and detail
-    assert "单圆弧的两端切线角必须相等" in detail[0]["msg"]
 
 
 def test_arc_web_limits_declares_family_specific_fields(client: TestClient) -> None:
@@ -340,15 +216,24 @@ def test_arc_web_limits_ceiling_is_inside_the_model_domain(client: TestClient) -
     assert payload["geometry_feasible"] is True
 
     at_ceiling = client.post(
-        "/api/v2/arc/generate",
-        json={**spec, "trailing_edge_half_wedge_deg": payload["maximum_feasible_half_wedge_deg"]},
+        "/api/workbench/preview",
+        json={
+            "family": "double_arc",
+            "spec": {
+                **spec,
+                "trailing_edge_half_wedge_deg": payload["maximum_feasible_half_wedge_deg"],
+            },
+        },
     )
     assert at_ceiling.status_code == 200, at_ceiling.text
     above = client.post(
-        "/api/v2/arc/generate",
+        "/api/workbench/preview",
         json={
-            **spec,
-            "trailing_edge_half_wedge_deg": payload["maximum_feasible_half_wedge_deg"] + 0.01,
+            "family": "double_arc",
+            "spec": {
+                **spec,
+                "trailing_edge_half_wedge_deg": payload["maximum_feasible_half_wedge_deg"] + 0.01,
+            },
         },
     )
     assert above.status_code == 422
@@ -394,27 +279,6 @@ def test_arc_web_limits_reports_geometry_infeasibility_separately(client: TestCl
     assert "自交" in payload["geometry_error"]
     # 报出的楔角上界只描述楔角，不代表这条 spec 能生成
     assert payload["wedge_bound_exists"] is True
-
-
-def test_arc_page_exposes_the_feasibility_and_node_controls(client: TestClient) -> None:
-    """页面必须暴露可行域卡片、站位输入、采样点数与节点表；脚本必须查询 limits。"""
-
-    page = client.get("/arc")
-    assert page.status_code == 200
-    for marker in (
-        'data-arc-bound="wedge_ceiling"',
-        'name="interior_node_stations"',
-        'name="points_per_side"',
-        "data-arc-nodes",
-        "可行域",
-    ):
-        assert marker in page.text, f"页面缺少 {marker!r}"
-    script = client.get("/static/arc.js")
-    assert script.status_code == 200
-    assert "/api/v2/arc/limits" in script.text
-    # 错误归一化：数组 detail 必须逐条展开，不能直接当字符串
-    assert "Array.isArray(detail)" in script.text
-    assert "CFCharts" in script.text
 
 
 def test_arc_cli_limits_supports_the_multiple_arc_family(tmp_path: Path) -> None:

@@ -6,20 +6,11 @@ from fastapi import HTTPException
 
 from cascade_forge.domain.circular_arc import (
     arc_feasibility_report,
-    generate_arc_profile,
 )
 from cascade_forge.domain.models_circular_arc import ArcProfileSpec
 
 
 def register_routes(application):
-
-    @application.post("/api/v2/arc/generate")
-    def generate_arc_api(spec: ArcProfileSpec) -> dict[str, Any]:
-        try:
-            geometry = generate_arc_profile(spec)
-        except (ValueError, ArithmeticError) as exc:
-            raise HTTPException(422, str(exc)) from exc
-        return {"geometry": geometry.model_dump(mode="json")}
 
     @application.post("/api/v2/arc/limits")
     def arc_limits_api(spec: ArcProfileSpec) -> dict[str, Any]:
