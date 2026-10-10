@@ -81,6 +81,10 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     await page.waitForFunction(() => !document.querySelector('.rail-saved-card.is-loading'));
     assert.equal(await page.locator('[data-rail-tab=saved]').getAttribute('aria-selected'), 'true');
     await page.screenshot({path: 'output/playwright/generation-custom-clean.png', fullPage: true});
+    // Saved-card clicks keep the saved tab selected; workspace/export controls
+    // live in the actions panel, so switch back before using them.
+    await page.locator('[data-rail-tab=actions]').click();
+    await page.waitForFunction(() => document.querySelector('[data-rail-tab=actions]').getAttribute('aria-selected') === 'true');
     await page.locator('[data-output-more] > summary').click();
     await page.locator('.rail-design-tools > summary').click();
     await page.locator('[data-save-workspace]').click();
@@ -94,6 +98,8 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     await page.locator('.rail-saved-card').first().click();
     await page.waitForFunction(() => !document.querySelector('.rail-saved-card.is-loading'));
     assert.equal(await page.locator('[data-rail-tab=saved]').getAttribute('aria-selected'), 'true');
+    await page.locator('[data-rail-tab=actions]').click();
+    await page.waitForFunction(() => document.querySelector('[data-rail-tab=actions]').getAttribute('aria-selected') === 'true');
     await page.waitForFunction(() => !document.querySelector('[data-profile-export=csv]').disabled);
     const pending = page.waitForEvent('download'); await page.locator('[data-profile-export=dat]').click();
     assert.match((await pending).suggestedFilename(), /\.dat$/);

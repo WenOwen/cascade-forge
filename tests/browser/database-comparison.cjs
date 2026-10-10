@@ -76,6 +76,22 @@ const base = process.env.CF_BASE_URL || 'http://127.0.0.1:8000';
     assert.match(await page.locator('[data-library-body]').textContent(), /没有匹配/);
     await page.locator('[data-library-filters] button[type=reset]').click();
     await page.waitForFunction(() => document.querySelector('[data-library-count]').textContent === '共 30 个叶型');
+    // Whole-card click on row padding activates the sample and moves the active highlight.
+    // Use explicit mouse coordinates: positioned locator clicks are unreliable inside the
+    // scrollable list once fullPage screenshots have resized the viewport.
+    const padRow = page.locator('.library-sample').nth(5);
+    await padRow.scrollIntoViewIfNeeded();
+    const padBox = await padRow.boundingBox();
+    await page.mouse.click(padBox.x + 4, padBox.y + 12);
+    await waitCharts(1);
+    assert.match(await page.locator('[data-library-export-target]').textContent(), /测试样本 6/);
+    assert.equal(await page.locator('.library-sample.active').count(), 1);
+    assert.equal(await page.locator('.library-sample').nth(5).getAttribute('aria-current'), 'true');
+    assert.equal(await page.locator('.library-sample').nth(4).getAttribute('aria-current'), 'false');
+    // Checkbox clicks toggle comparison without triggering row activation.
+    await page.locator('[data-library-body] input').nth(3).check(); await waitCharts(1);
+    assert.equal(await page.locator('.library-sample').nth(3).evaluate(node => node.classList.contains('checked')), true);
+    await page.locator('[data-library-body] input').nth(3).uncheck(); await waitCharts(1);
     await page.setViewportSize({ width: 390, height: 844 });
     await inputs.nth(0).check(); await waitCharts(1); await inputs.nth(1).check(); await waitCharts(2);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false);

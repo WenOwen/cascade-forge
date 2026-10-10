@@ -17,6 +17,7 @@
       list.querySelectorAll("[data-sample-id]").forEach(row => {
         const id = row.dataset.sampleId, active = id === activeId;
         row.classList.toggle("active", active); row.classList.toggle("checked", comparison.has(id));
+        row.setAttribute("aria-current", String(active));
         row.querySelector("input").checked = comparison.has(id);
         row.querySelector("button").setAttribute("aria-pressed", String(active));
       });
@@ -140,6 +141,8 @@
         if (token !== sequence) return; total = result.total; list.replaceChildren(); list.scrollTop = 0;
         for (const item of result.items) {
           const row = document.createElement("div"); row.className = "library-sample"; row.dataset.sampleId = item.geometry_id;
+          row.title = item.label || item.name;
+          row.addEventListener("click", event => { if (event.target.closest("input, button")) return; activate(item); });
           const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.setAttribute("aria-label", `比较 ${item.name}`);
           checkbox.addEventListener("change", () => toggle(item, checkbox));
           const button = document.createElement("button"); button.type = "button"; button.className = "library-sample-button";

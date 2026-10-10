@@ -324,8 +324,8 @@ def test_database_has_scrollable_selector_and_four_image_comparison(client):
     assert "最多 4 个" in page.text
     assert "<table" not in page.text
     for asset in (
-        "/static/profile-database.js?v=3.2-three-pages",
-        "/static/profile-database.css?v=3.2-three-pages",
+        "/static/profile-database.js?v=3.3-db-cards",
+        "/static/profile-database.css?v=3.3-db-cards",
     ):
         assert asset in page.text
         assert client.get(asset).status_code == 200
